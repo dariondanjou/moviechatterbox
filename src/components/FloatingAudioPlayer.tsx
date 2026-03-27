@@ -1,5 +1,6 @@
+"use client";
 import { useState } from "react";
-import { Link } from "wouter";
+import Link from "next/link";
 import { Mic, MicOff, PhoneOff, Users, Hand, ChevronUp, ChevronDown, Volume2, Radio } from "lucide-react";
 import { useAudioRoom } from "@/contexts/AudioRoomContext";
 import { Button } from "@/components/ui/button";

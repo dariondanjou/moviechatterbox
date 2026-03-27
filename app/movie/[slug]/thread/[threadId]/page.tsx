@@ -1,5 +1,7 @@
+"use client";
 import { useState } from "react";
-import { Link, useParams } from "wouter";
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -10,7 +12,9 @@ import { toast } from "sonner";
 import { ChevronLeft, MessageSquare, ThumbsUp, AlertTriangle, Lock } from "lucide-react";
 
 export default function ThreadDetail() {
-  const { slug, threadId } = useParams<{ slug: string; threadId: string }>();
+  const params = useParams();
+  const slug = params.slug as string;
+  const threadId = params.threadId as string;
   const { isAuthenticated } = useAuth();
   const [replyBody, setReplyBody] = useState("");
 
@@ -130,12 +134,13 @@ export default function ThreadDetail() {
           ) : (
             <div className="bg-card border border-border rounded-xl p-4 text-center">
               <p className="text-muted-foreground text-sm mb-3">Sign in to join the discussion</p>
-              <Button
-                onClick={() => window.location.href = "/auth"}
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
-              >
-                Sign In
-              </Button>
+              <Link href="/auth">
+                <Button
+                  className="bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  Sign In
+                </Button>
+              </Link>
             </div>
           )
         ) : (

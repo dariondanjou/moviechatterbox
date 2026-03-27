@@ -1,5 +1,6 @@
+"use client";
 import { useState } from "react";
-import { Link } from "wouter";
+import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/hooks/useAuth";
 import MovieCard from "@/components/MovieCard";

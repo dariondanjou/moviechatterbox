@@ -1,5 +1,7 @@
+"use client";
 import { useState, useRef, useEffect } from "react";
-import { Link, useLocation } from "wouter";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -14,7 +16,7 @@ import {
 } from "lucide-react";
 
 export default function Navbar() {
-  const [location] = useLocation();
+  const location = usePathname();
   const { user, isAuthenticated, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);

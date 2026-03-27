@@ -1,5 +1,7 @@
+"use client";
 import { useState } from "react";
-import { Link, useParams } from "wouter";
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/hooks/useAuth";
 import MovieCard from "@/components/MovieCard";
@@ -17,7 +19,8 @@ import {
 } from "lucide-react";
 
 export default function MovieDetail() {
-  const { slug } = useParams<{ slug: string }>();
+  const params = useParams();
+  const slug = params.slug as string;
   const { isAuthenticated, user } = useAuth();
   const [reviewTitle, setReviewTitle] = useState("");
   const [reviewBody, setReviewBody] = useState("");

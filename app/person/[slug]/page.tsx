@@ -1,4 +1,6 @@
-import { Link, useParams } from "wouter";
+"use client";
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import { trpc } from "@/lib/trpc";
 import MovieCard from "@/components/MovieCard";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -8,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, Calendar, MapPin, Film, Star, Clapperboard } from "lucide-react";
 
 export default function PersonProfile() {
-  const { slug } = useParams<{ slug: string }>();
+  const params = useParams();
+  const slug = params.slug as string;
   const { data: person, isLoading } = trpc.person.detail.useQuery({ slug: slug! }, { enabled: !!slug });
 
   if (isLoading) {

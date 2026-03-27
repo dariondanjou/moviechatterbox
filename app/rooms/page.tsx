@@ -1,3 +1,4 @@
+"use client";
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
@@ -8,12 +9,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { useLocation } from "wouter";
+import { useRouter } from "next/navigation";
 import { Mic, Radio, Users, Plus, Search, Headphones } from "lucide-react";
 
 export default function Rooms() {
   const { isAuthenticated } = useAuth();
-  const [, navigate] = useLocation();
+  const router = useRouter();
   const [searchQ, setSearchQ] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", tags: "" });
@@ -31,7 +32,7 @@ export default function Rooms() {
       setForm({ name: "", description: "", tags: "" });
       refetch();
       toast.success("Room created! Joining now...");
-      navigate(`/rooms/${data.slug}`);
+      router.push(`/rooms/${data.slug}`);
     },
     onError: () => toast.error("Failed to create room"),
   });

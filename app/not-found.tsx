@@ -1,4 +1,6 @@
-import { Link } from "wouter";
+"use client";
+
+import Link from "next/link";
 import { Film } from "lucide-react";
 
 export default function NotFound() {

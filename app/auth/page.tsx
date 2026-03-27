@@ -1,11 +1,13 @@
-import { useState } from "react";
+"use client";
+
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { useLocation } from "wouter";
+import { useRouter } from "next/navigation";
 import { Film, Mail, Chrome } from "lucide-react";
 
 export default function AuthPage() {
   const { signInWithGoogle, signInWithTwitter, signInWithEmail, signUpWithEmail, isAuthenticated } = useAuth();
-  const [, setLocation] = useLocation();
+  const router = useRouter();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -13,10 +15,9 @@ export default function AuthPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  if (isAuthenticated) {
-    setLocation("/");
-    return null;
-  }
+  useEffect(() => {
+    if (isAuthenticated) router.push("/");
+  }, [isAuthenticated, router]);
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +51,6 @@ export default function AuthPage() {
           </p>
         </div>
 
-        {/* Social Login Buttons */}
         <div className="space-y-3 mb-6">
           <button
             onClick={signInWithGoogle}
@@ -68,10 +68,8 @@ export default function AuthPage() {
             </svg>
             Continue with X
           </button>
-
         </div>
 
-        {/* Divider */}
         <div className="relative mb-6">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-border" />
@@ -81,7 +79,6 @@ export default function AuthPage() {
           </div>
         </div>
 
-        {/* Email Form */}
         <form onSubmit={handleEmailAuth} className="space-y-4">
           {mode === "signup" && (
             <div>

@@ -1,4 +1,6 @@
-import { Link } from "wouter";
+"use client";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import MovieCard from "@/components/MovieCard";
@@ -7,6 +9,7 @@ import { Bookmark, Film } from "lucide-react";
 
 export default function Watchlist() {
   const { isAuthenticated, loading } = useAuth();
+  const router = useRouter();
   const { data: watchlist, isLoading } = trpc.watchlist.list.useQuery(undefined, { enabled: isAuthenticated });
 
   if (loading || isLoading) {
@@ -26,7 +29,7 @@ export default function Watchlist() {
           <p className="text-muted-foreground mb-6">Save movies to watch later and track your progress.</p>
           <Button
             className="bg-primary text-primary-foreground hover:bg-primary/90"
-            onClick={() => { /* handled by auth modal */ }}
+            onClick={() => router.push("/auth")}
           >
             Sign In
           </Button>

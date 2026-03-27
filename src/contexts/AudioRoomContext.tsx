@@ -1,3 +1,4 @@
+"use client";
 import { createContext, useContext, useState, useCallback, ReactNode } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";

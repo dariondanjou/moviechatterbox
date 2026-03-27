@@ -1,4 +1,6 @@
-import { Link } from "wouter";
+"use client";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import MovieCard from "@/components/MovieCard";
@@ -10,6 +12,7 @@ import { Star, Bookmark, MessageSquare, Film, Calendar, Award } from "lucide-rea
 
 export default function UserProfile() {
   const { user, isAuthenticated, loading } = useAuth();
+  const router = useRouter();
 
   const { data: watchlist } = trpc.watchlist.list.useQuery(undefined, { enabled: isAuthenticated });
   const { data: myReviews } = trpc.review.myReviews.useQuery(undefined, { enabled: isAuthenticated });
@@ -32,7 +35,7 @@ export default function UserProfile() {
           <p className="text-muted-foreground mb-6">Track your movies, write reviews, and join discussions.</p>
           <Button
             className="bg-primary text-primary-foreground hover:bg-primary/90"
-            onClick={() => { /* handled by auth modal */ }}
+            onClick={() => router.push("/auth")}
           >
             Sign In
           </Button>

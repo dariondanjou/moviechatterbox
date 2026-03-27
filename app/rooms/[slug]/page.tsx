@@ -1,5 +1,7 @@
+"use client";
 import { useState, useEffect } from "react";
-import { Link, useParams, useLocation } from "wouter";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/hooks/useAuth";
 import { useAudioRoom } from "@/contexts/AudioRoomContext";
@@ -75,9 +77,10 @@ function UserBubble({ name, avatar, isMuted, isHost, handRaised, isSpeaking }: {
 }
 
 export default function RoomDetail() {
-  const { slug } = useParams<{ slug: string }>();
+  const params = useParams();
+  const slug = params.slug as string;
   const { isAuthenticated, user } = useAuth();
-  const [, navigate] = useLocation();
+  const router = useRouter();
   const { activeRoom, joinRoom, leaveRoom, isMuted, toggleMute, isOnStage, setIsOnStage, handRaised, raiseHand } = useAudioRoom();
   const [isInRoom, setIsInRoom] = useState(false);
 
@@ -87,8 +90,7 @@ export default function RoomDetail() {
 
   const handleJoin = () => {
     if (!isAuthenticated) {
-      // Redirect to auth page
-      window.location.href = "/auth";
+      router.push("/auth");
       return;
     }
     if (room) {
@@ -100,7 +102,7 @@ export default function RoomDetail() {
   const handleLeave = () => {
     leaveRoom();
     setIsInRoom(false);
-    navigate("/rooms");
+    router.push("/rooms");
   };
 
   if (isLoading) {

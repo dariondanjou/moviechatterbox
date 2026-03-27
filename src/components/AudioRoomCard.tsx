@@ -1,4 +1,5 @@
-import { Link } from "wouter";
+"use client";
+import Link from "next/link";
 import { Mic, Users, Radio } from "lucide-react";
 
 interface AudioRoomCardProps {

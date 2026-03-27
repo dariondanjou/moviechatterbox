@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
-import { useSearch } from "wouter";
+"use client";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { trpc } from "@/lib/trpc";
 import MovieCard from "@/components/MovieCard";
 import { Button } from "@/components/ui/button";
@@ -9,12 +10,11 @@ import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Search, SlidersHorizontal, X, ChevronLeft, ChevronRight, Film } from "lucide-react";
 
-export default function Browse() {
-  const search = useSearch();
-  const params = new URLSearchParams(search);
+function BrowseInner() {
+  const searchParams = useSearchParams();
 
-  const [searchQ, setSearchQ] = useState(params.get("q") || "");
-  const [selectedGenre, setSelectedGenre] = useState(params.get("genre") || "");
+  const [searchQ, setSearchQ] = useState(searchParams.get("q") || "");
+  const [selectedGenre, setSelectedGenre] = useState(searchParams.get("genre") || "");
   const [selectedYear, setSelectedYear] = useState<string>("");
   const [minRating, setMinRating] = useState<number>(0);
   const [sortBy, setSortBy] = useState<"imdbRating"|"year"|"title"|"ratingCount">("imdbRating");
@@ -24,7 +24,7 @@ export default function Browse() {
 
   // Sync sort from URL
   useEffect(() => {
-    const sort = params.get("sort");
+    const sort = searchParams.get("sort");
     if (sort === "trending" || sort === "top") setSortBy("imdbRating");
     if (sort === "year") setSortBy("year");
   }, []);
@@ -258,5 +258,17 @@ export default function Browse() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function Browse() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <BrowseInner />
+    </Suspense>
   );
 }
