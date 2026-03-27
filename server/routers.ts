@@ -293,7 +293,7 @@ const reviewRouter = router({
           containsSpoilers: reviews.containsSpoilers, likes: reviews.likes,
           createdAt: reviews.createdAt,
           userName: sql<string>`(SELECT name FROM users WHERE id = ${reviews.userId})`,
-          userAvatar: sql<string>`(SELECT avatarUrl FROM users WHERE id = ${reviews.userId})`,
+          userAvatar: sql<string>`(SELECT avatar_url FROM users WHERE id = ${reviews.userId})`,
         })
         .from(reviews)
         .where(eq(reviews.movieId, input.movieId))
@@ -392,7 +392,7 @@ const threadRouter = router({
           pinned: threads.pinned, locked: threads.locked,
           replyCount: threads.replyCount, likes: threads.likes, createdAt: threads.createdAt,
           userName: sql<string>`(SELECT name FROM users WHERE id = ${threads.userId})`,
-          userAvatar: sql<string>`(SELECT avatarUrl FROM users WHERE id = ${threads.userId})`,
+          userAvatar: sql<string>`(SELECT avatar_url FROM users WHERE id = ${threads.userId})`,
         })
         .from(threads)
         .where(eq(threads.movieId, input.movieId))
@@ -413,7 +413,7 @@ const threadRouter = router({
           id: threadReplies.id, body: threadReplies.body, likes: threadReplies.likes,
           parentReplyId: threadReplies.parentReplyId, createdAt: threadReplies.createdAt,
           userName: sql<string>`(SELECT name FROM users WHERE id = ${threadReplies.userId})`,
-          userAvatar: sql<string>`(SELECT avatarUrl FROM users WHERE id = ${threadReplies.userId})`,
+          userAvatar: sql<string>`(SELECT avatar_url FROM users WHERE id = ${threadReplies.userId})`,
         })
         .from(threadReplies)
         .where(eq(threadReplies.threadId, input.threadId))
@@ -426,8 +426,8 @@ const threadRouter = router({
     .mutation(async ({ input, ctx }) => {
       const [result] = await db.insert(threads).values({
         movieId: input.movieId, userId: ctx.userId, title: input.title, body: input.body,
-      });
-      return { id: (result as any).insertId };
+      }).returning({ id: threads.id });
+      return { id: result.id };
     }),
 
   reply: protectedProcedure
@@ -452,7 +452,7 @@ const roomRouter = router({
         listenerCount: audioRooms.listenerCount, speakerCount: audioRooms.speakerCount,
         tags: audioRooms.tags, createdAt: audioRooms.createdAt,
         hostName: sql<string>`(SELECT name FROM users WHERE id = ${audioRooms.hostUserId})`,
-        hostAvatar: sql<string>`(SELECT avatarUrl FROM users WHERE id = ${audioRooms.hostUserId})`,
+        hostAvatar: sql<string>`(SELECT avatar_url FROM users WHERE id = ${audioRooms.hostUserId})`,
         relatedMovieId: audioRooms.relatedMovieId,
         relatedPersonId: audioRooms.relatedPersonId,
       })
@@ -509,7 +509,7 @@ const roomRouter = router({
           isMuted: roomParticipants.isMuted, handRaised: roomParticipants.handRaised,
           joinedAt: roomParticipants.joinedAt,
           userName: sql<string>`(SELECT name FROM users WHERE id = ${roomParticipants.userId})`,
-          userAvatar: sql<string>`(SELECT avatarUrl FROM users WHERE id = ${roomParticipants.userId})`,
+          userAvatar: sql<string>`(SELECT avatar_url FROM users WHERE id = ${roomParticipants.userId})`,
         })
         .from(roomParticipants)
         .where(and(eq(roomParticipants.roomId, room.id), isNull(roomParticipants.leftAt)));
@@ -583,7 +583,8 @@ const userRouter = router({
   updateProfile: protectedProcedure
     .input(z.object({ name: z.string().optional(), bio: z.string().optional(), avatarUrl: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
-      await db.update(users).set(input).where(eq(users.id, ctx.userId));
+      const { avatarUrl, ...rest } = input;
+      await db.update(users).set({ ...rest, ...(avatarUrl !== undefined ? { avatarUrl } : {}) }).where(eq(users.id, ctx.userId));
       return { success: true };
     }),
 });
