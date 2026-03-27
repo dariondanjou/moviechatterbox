@@ -2,12 +2,12 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "../shared/schema";
 
-const connectionString = process.env.DATABASE_URL!;
+const isPooler = process.env.DATABASE_URL?.includes("pooler.supabase.com");
 
-const client = postgres(connectionString, {
-  prepare: false,
-  connection: {
-    options: `-c search_path=public`,
-  },
-});
+const client = isPooler
+  ? postgres(process.env.DATABASE_URL!, {
+      prepare: false,
+    })
+  : postgres(process.env.DATABASE_URL!);
+
 export const db = drizzle(client, { schema });
