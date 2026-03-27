@@ -5,6 +5,9 @@ import * as schema from "../shared/schema";
 const connectionString = process.env.DATABASE_URL!;
 
 const client = postgres(connectionString, {
-  prepare: false, // required for Supabase pooler (pgbouncer)
+  prepare: false,
+  connection: {
+    options: `-c search_path=public`,
+  },
 });
 export const db = drizzle(client, { schema });
