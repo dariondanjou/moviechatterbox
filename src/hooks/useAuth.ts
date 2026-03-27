@@ -17,7 +17,7 @@ export interface AuthState {
   isLoading: boolean;
   loading: boolean; // alias for isLoading (compat)
   signInWithGoogle: () => Promise<void>;
-  signInWithFacebook: () => Promise<void>;
+
   signInWithTwitter: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUpWithEmail: (email: string, password: string, name?: string) => Promise<{ error: Error | null }>;
@@ -66,12 +66,6 @@ export function useAuth(): AuthState {
     });
   }, []);
 
-  const signInWithFacebook = useCallback(async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: "facebook",
-      options: { redirectTo: `${window.location.origin}/` },
-    });
-  }, []);
 
   const signInWithTwitter = useCallback(async () => {
     await supabase.auth.signInWithOAuth({
@@ -105,7 +99,7 @@ export function useAuth(): AuthState {
     isLoading,
     loading: isLoading,
     signInWithGoogle,
-    signInWithFacebook,
+
     signInWithTwitter,
     signInWithEmail,
     signUpWithEmail,

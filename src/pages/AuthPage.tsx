@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
-import { Film, Mail, Chrome, Facebook } from "lucide-react";
+import { Film, Mail, Chrome } from "lucide-react";
 
 export default function AuthPage() {
-  const { signInWithGoogle, signInWithFacebook, signInWithTwitter, signInWithEmail, signUpWithEmail, isAuthenticated } = useAuth();
+  const { signInWithGoogle, signInWithTwitter, signInWithEmail, signUpWithEmail, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
@@ -68,13 +68,7 @@ export default function AuthPage() {
             </svg>
             Continue with X
           </button>
-          <button
-            onClick={signInWithFacebook}
-            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-lg border border-border bg-card hover:bg-secondary transition-colors text-sm font-medium text-foreground"
-          >
-            <Facebook className="w-5 h-5" />
-            Continue with Facebook
-          </button>
+
         </div>
 
         {/* Divider */}
