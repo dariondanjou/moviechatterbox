@@ -17,7 +17,7 @@ import {
 
 export default function Navbar() {
   const location = usePathname();
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, isLoading, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -190,7 +190,7 @@ export default function Navbar() {
                   </DropdownMenuContent>
                 </DropdownMenu>
               </>
-            ) : (
+            ) : !isLoading ? (
               <Button
                 size="sm"
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
@@ -198,7 +198,7 @@ export default function Navbar() {
               >
                 Sign In
               </Button>
-            )}
+            ) : null}
 
             {/* Mobile Menu Toggle */}
             <button
@@ -236,6 +236,43 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
+            <div className="border-t border-border mt-2 pt-2">
+              {isAuthenticated && user ? (
+                <>
+                  <Link
+                    href="/profile"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                  >
+                    <User className="w-4 h-4" />
+                    My Profile
+                  </Link>
+                  <Link
+                    href="/watchlist"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                  >
+                    <BookmarkPlus className="w-4 h-4" />
+                    Watchlist
+                  </Link>
+                  <button
+                    onClick={() => { logout(); setMobileMenuOpen(false); }}
+                    className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-destructive hover:bg-secondary transition-colors w-full text-left"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Sign Out
+                  </button>
+                </>
+              ) : !isLoading ? (
+                <button
+                  onClick={() => { window.location.href = "/auth"; setMobileMenuOpen(false); }}
+                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-primary hover:bg-secondary transition-colors w-full text-left"
+                >
+                  <User className="w-4 h-4" />
+                  Sign In
+                </button>
+              ) : null}
+            </div>
           </div>
         )}
       </div>
