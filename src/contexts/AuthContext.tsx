@@ -42,12 +42,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setRawUser(session?.user ?? null);
-      setIsLoading(false);
-    });
-
+    // Listen for auth state changes first so we catch the SIGNED_IN event
+    // that fires when detectSessionInUrl processes the OAuth redirect
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setSession(session);
@@ -55,6 +51,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsLoading(false);
       }
     );
+
+    // Then check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setRawUser(session?.user ?? null);
+      setIsLoading(false);
+    });
 
     return () => subscription.unsubscribe();
   }, []);
