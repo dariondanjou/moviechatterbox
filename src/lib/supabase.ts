@@ -14,6 +14,7 @@ export const supabase = createClient(
   supabaseAnonKey || "placeholder",
   {
     auth: {
+      flowType: "implicit",
       detectSessionInUrl: true,
       persistSession: true,
       autoRefreshToken: true,
