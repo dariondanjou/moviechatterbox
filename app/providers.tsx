@@ -6,6 +6,7 @@ import { httpBatchLink } from "@trpc/client";
 import { trpc } from "@/lib/trpc";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AudioRoomProvider } from "@/contexts/AudioRoomContext";
+import { AuthProvider } from "@/contexts/AuthContext";
 
 function getBaseUrl() {
   if (typeof window !== "undefined") return "";
@@ -34,9 +35,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider defaultTheme="dark">
-          <AudioRoomProvider>{children}</AudioRoomProvider>
-        </ThemeProvider>
+        <AuthProvider>
+          <ThemeProvider defaultTheme="dark">
+            <AudioRoomProvider>{children}</AudioRoomProvider>
+          </ThemeProvider>
+        </AuthProvider>
       </QueryClientProvider>
     </trpc.Provider>
   );
