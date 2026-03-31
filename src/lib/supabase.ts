@@ -11,11 +11,5 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createBrowserClient(
   supabaseUrl || "https://placeholder.supabase.co",
-  supabaseAnonKey || "placeholder",
-  {
-    auth: {
-      flowType: "implicit",
-      detectSessionInUrl: true,
-    },
-  }
+  supabaseAnonKey || "placeholder"
 );
