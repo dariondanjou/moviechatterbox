@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
-import { Film, Mail, Chrome } from "lucide-react";
+import { Film, Mail, Chrome, Twitter } from "lucide-react";
 
 export default function AuthPage() {
   const { signInWithGoogle, signInWithTwitter, signInWithEmail, signUpWithEmail, isAuthenticated } = useAuth();
@@ -59,7 +59,13 @@ export default function AuthPage() {
             <Chrome className="w-5 h-5" />
             Continue with Google
           </button>
-          {/* X/Twitter login hidden — provider not yet configured in Supabase */}
+          <button
+            onClick={signInWithTwitter}
+            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-lg border border-border bg-card hover:bg-secondary transition-colors text-sm font-medium text-foreground"
+          >
+            <Twitter className="w-5 h-5" />
+            Continue with X
+          </button>
         </div>
 
         <div className="relative mb-6">

@@ -9,5 +9,6 @@ dist
 .claude/
 *.png
 
+supabase/.temp/
 .vercel
 .env*.local
