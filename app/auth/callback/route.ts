@@ -1,5 +1,4 @@
 import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function GET(request: NextRequest) {
@@ -7,35 +6,42 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/";
 
+  // On Vercel, origin is the internal URL — use x-forwarded-host for the real domain
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const isLocalEnv = process.env.NODE_ENV === "development";
+  const redirectBase = isLocalEnv || !forwardedHost
+    ? origin
+    : `https://${forwardedHost}`;
+
   if (code) {
-    const cookieStore = await cookies();
+    // Collect cookies so we can apply them to the redirect response
+    const pendingCookies: { name: string; value: string; options: Record<string, unknown> }[] = [];
+
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           getAll() {
-            return cookieStore.getAll();
+            return request.cookies.getAll();
           },
           setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              );
-            } catch {
-              // Writable only in Server Actions / Route Handlers
-            }
+            pendingCookies.push(...cookiesToSet);
           },
         },
       }
     );
 
     const { error } = await supabase.auth.exchangeCodeForSession(code);
+
     if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
+      const response = NextResponse.redirect(`${redirectBase}${next}`);
+      for (const { name, value, options } of pendingCookies) {
+        response.cookies.set(name, value, options);
+      }
+      return response;
     }
   }
 
-  // If no code or exchange failed, redirect to auth page with error
-  return NextResponse.redirect(`${origin}/auth?error=auth_failed`);
+  return NextResponse.redirect(`${redirectBase}/auth?error=auth_failed`);
 }

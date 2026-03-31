@@ -1,23 +1,50 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Film, Mail, Chrome, Twitter } from "lucide-react";
 
 export default function AuthPage() {
+  return (
+    <Suspense>
+      <AuthPageContent />
+    </Suspense>
+  );
+}
+
+function AuthPageContent() {
   const { signInWithGoogle, signInWithTwitter, signInWithEmail, signUpWithEmail, isAuthenticated } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<string | null>(null);
 
   useEffect(() => {
     if (isAuthenticated) router.push("/");
   }, [isAuthenticated, router]);
+
+  useEffect(() => {
+    const urlError = searchParams.get("error");
+    if (urlError === "auth_failed") {
+      setError("Sign-in failed. Please try again.");
+    }
+  }, [searchParams]);
+
+  const handleOAuth = async (provider: "google" | "x") => {
+    setOauthLoading(provider);
+    setError("");
+    if (provider === "google") {
+      await signInWithGoogle();
+    } else {
+      await signInWithTwitter();
+    }
+  };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,18 +80,28 @@ export default function AuthPage() {
 
         <div className="space-y-3 mb-6">
           <button
-            onClick={signInWithGoogle}
-            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-lg border border-border bg-card hover:bg-secondary transition-colors text-sm font-medium text-foreground"
+            onClick={() => handleOAuth("google")}
+            disabled={!!oauthLoading}
+            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-lg border border-border bg-card hover:bg-secondary transition-colors text-sm font-medium text-foreground disabled:opacity-50"
           >
-            <Chrome className="w-5 h-5" />
-            Continue with Google
+            {oauthLoading === "google" ? (
+              <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Chrome className="w-5 h-5" />
+            )}
+            {oauthLoading === "google" ? "Redirecting..." : "Continue with Google"}
           </button>
           <button
-            onClick={signInWithTwitter}
-            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-lg border border-border bg-card hover:bg-secondary transition-colors text-sm font-medium text-foreground"
+            onClick={() => handleOAuth("x")}
+            disabled={!!oauthLoading}
+            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-lg border border-border bg-card hover:bg-secondary transition-colors text-sm font-medium text-foreground disabled:opacity-50"
           >
-            <Twitter className="w-5 h-5" />
-            Continue with X
+            {oauthLoading === "x" ? (
+              <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Twitter className="w-5 h-5" />
+            )}
+            {oauthLoading === "x" ? "Redirecting..." : "Continue with X"}
           </button>
         </div>
 
