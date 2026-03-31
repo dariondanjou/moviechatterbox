@@ -1,41 +1,39 @@
 "use client";
 
-import { useEffect, useRef, Suspense } from "react";
+import { useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { useSearchParams } from "next/navigation";
 
-function CallbackHandler() {
-  const searchParams = useSearchParams();
-  const handled = useRef(false);
-
+export default function AuthCallback() {
   useEffect(() => {
-    if (handled.current) return;
-    handled.current = true;
-
-    const code = searchParams.get("code");
-
-    if (code) {
-      // Exchange the auth code client-side where the PKCE code verifier is accessible
-      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-        if (error) {
-          console.error("OAuth code exchange failed:", error.message);
-          window.location.href = "/auth?error=auth_failed";
-        } else {
-          // Full reload ensures AuthProvider picks up the new session
+    // With implicit flow, detectSessionInUrl automatically processes
+    // the access_token and refresh_token from the URL hash.
+    // We listen for the auth state change to know when it's done.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (event === "SIGNED_IN" && session) {
+          // Session established — full reload to update all components
           window.location.href = "/";
         }
-      });
-    } else {
-      // No code param — check if detectSessionInUrl already handled it
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) {
-          window.location.href = "/";
-        } else {
-          window.location.href = "/auth?error=auth_failed";
-        }
-      });
-    }
-  }, [searchParams]);
+      }
+    );
+
+    // Fallback: if already authenticated (session from cookies), redirect
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        window.location.href = "/";
+      }
+    });
+
+    // Timeout fallback — if nothing happens after 5s, something went wrong
+    const timeout = setTimeout(() => {
+      window.location.href = "/auth?error=auth_failed";
+    }, 5000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
+  }, []);
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center">
@@ -44,13 +42,5 @@ function CallbackHandler() {
         <p className="text-muted-foreground text-sm">Signing you in...</p>
       </div>
     </div>
-  );
-}
-
-export default function AuthCallback() {
-  return (
-    <Suspense>
-      <CallbackHandler />
-    </Suspense>
   );
 }

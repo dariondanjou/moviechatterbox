@@ -14,7 +14,7 @@ export const supabase = createBrowserClient(
   supabaseAnonKey || "placeholder",
   {
     auth: {
-      flowType: "pkce",
+      flowType: "implicit",
       detectSessionInUrl: true,
     },
   }
