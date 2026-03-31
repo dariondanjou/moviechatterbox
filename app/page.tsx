@@ -31,10 +31,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* TEST BANNER — remove after confirming deploys work */}
-      <div className="bg-primary text-primary-foreground text-center py-2 text-sm font-bold">
-        DEPLOY TEST v2 — If you see this, the deploy is working!
-      </div>
       {/* ── Hero Section ─────────────────────────────────────────────────────── */}
       {heroMovie ? (
         <section className="relative h-[70vh] min-h-[500px] overflow-hidden">
