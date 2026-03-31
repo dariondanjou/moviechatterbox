@@ -8,7 +8,8 @@
     "start": "next start",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "crawl": "npx tsx scripts/crawl.ts"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.2",
