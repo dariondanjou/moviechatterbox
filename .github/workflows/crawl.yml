@@ -1,0 +1,58 @@
+name: Movie Crawler & Person Enricher
+
+on:
+  schedule:
+    # Run crawl every 6 hours
+    - cron: '0 0,6,12,18 * * *'
+    # Run enrich every 3 hours (offset by 1 hour from crawl)
+    - cron: '0 1,4,7,10,13,16,19,22 * * *'
+  workflow_dispatch:
+    inputs:
+      endpoint:
+        description: 'Which endpoint to call'
+        required: false
+        default: 'both'
+        type: choice
+        options:
+          - crawl
+          - enrich
+          - both
+
+jobs:
+  crawl:
+    if: >-
+      github.event_name == 'workflow_dispatch' && (inputs.endpoint == 'crawl' || inputs.endpoint == 'both')
+      || github.event_name == 'schedule' && github.event.schedule == '0 0,6,12,18 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Crawl new movies
+        run: |
+          response=$(curl -s -w "\n%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://www.moviechatterbox.com/api/cron/crawl")
+          http_code=$(echo "$response" | tail -1)
+          body=$(echo "$response" | head -n -1)
+          echo "$body"
+          if [ "$http_code" != "200" ]; then
+            echo "::error::Crawl failed with HTTP $http_code"
+            exit 1
+          fi
+
+  enrich:
+    if: >-
+      github.event_name == 'workflow_dispatch' && (inputs.endpoint == 'enrich' || inputs.endpoint == 'both')
+      || github.event_name == 'schedule' && github.event.schedule == '0 1,4,7,10,13,16,19,22 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enrich person profiles
+        run: |
+          response=$(curl -s -w "\n%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://www.moviechatterbox.com/api/cron/enrich")
+          http_code=$(echo "$response" | tail -1)
+          body=$(echo "$response" | head -n -1)
+          echo "$body"
+          if [ "$http_code" != "200" ]; then
+            echo "::error::Enrich failed with HTTP $http_code"
+            exit 1
+          fi
