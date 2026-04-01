@@ -318,6 +318,15 @@ export async function GET(request: Request) {
     errors.push(`fatal: ${e.message}`);
   }
 
+  // Fire-and-forget: trigger the enrich endpoint too
+  try {
+    const host = request.headers.get("host") || "localhost:3000";
+    const protocol = host.includes("localhost") ? "http" : "https";
+    fetch(`${protocol}://${host}/api/cron/enrich`, {
+      headers: CRON_SECRET ? { authorization: `Bearer ${CRON_SECRET}` } : {},
+    }).catch(() => {});
+  } catch { /* ignore */ }
+
   return NextResponse.json({
     ok: true,
     moviesAdded: added,
