@@ -129,14 +129,14 @@ export default function PersonProfile() {
                 {actingCredits.length > 0 ? (
                   <div className="flex gap-4 overflow-x-auto pb-3">
                     {actingCredits.map((c: any) => (
-                      <div key={c.movieId} className="shrink-0">
+                      <div key={c.id} className="shrink-0">
                         <MovieCard
-                          id={c.movieId}
-                          title={c.movieTitle}
-                          slug={c.movieSlug}
-                          year={c.movieYear}
-                          posterUrl={c.moviePoster}
-                          imdbRating={c.movieRating}
+                          id={c.id}
+                          title={c.title}
+                          slug={c.slug}
+                          year={c.year}
+                          posterUrl={c.posterUrl}
+                          imdbRating={c.imdbRating}
                           size="md"
                         />
                         {c.character && (
@@ -154,16 +154,16 @@ export default function PersonProfile() {
                 <TabsContent value="crew">
                   <div className="space-y-2">
                     {crewCredits.map((c: any) => (
-                      <Link key={c.movieId} href={`/movie/${c.movieSlug}`}>
+                      <Link key={`${c.id}-${c.job}`} href={`/movie/${c.slug}`}>
                         <div className="flex items-center gap-3 p-3 bg-card border border-border rounded-lg hover:border-primary/30 transition-colors">
                           <img
-                            src={c.moviePoster || `https://via.placeholder.com/40x60/1a1a1a/ff6b35?text=?`}
-                            alt={c.movieTitle}
+                            src={c.posterUrl || `https://via.placeholder.com/40x60/1a1a1a/ff6b35?text=?`}
+                            alt={c.title}
                             className="w-10 h-14 object-cover rounded"
                           />
                           <div>
-                            <div className="text-sm font-semibold text-foreground hover:text-primary transition-colors">{c.movieTitle}</div>
-                            <div className="text-xs text-muted-foreground">{c.job} · {c.movieYear}</div>
+                            <div className="text-sm font-semibold text-foreground hover:text-primary transition-colors">{c.title}</div>
+                            <div className="text-xs text-muted-foreground">{c.job} · {c.year}</div>
                           </div>
                         </div>
                       </Link>
