@@ -26,10 +26,11 @@ async function tmdbFetch<T>(path: string): Promise<T> {
 }
 
 export async function GET(request: Request) {
-  // Verify cron secret
+  // Verify cron secret (skip in development; allow Vercel cron)
   if (CRON_SECRET) {
     const authHeader = request.headers.get("authorization");
-    if (authHeader !== `Bearer ${CRON_SECRET}`) {
+    const isVercelCron = request.headers.get("x-vercel-cron") === "1";
+    if (!isVercelCron && authHeader !== `Bearer ${CRON_SECRET}`) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
   }

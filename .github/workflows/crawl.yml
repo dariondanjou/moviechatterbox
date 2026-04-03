@@ -2,10 +2,10 @@ name: Movie Crawler & Person Enricher
 
 on:
   schedule:
-    # Run crawl every 6 hours
+    # Run crawl every 6 hours (matches vercel.json)
     - cron: '0 0,6,12,18 * * *'
-    # Run enrich every 3 hours (offset by 1 hour from crawl)
-    - cron: '0 1,4,7,10,13,16,19,22 * * *'
+    # Run enrich every 6 hours offset by 1 hour
+    - cron: '0 1,7,13,19 * * *'
   workflow_dispatch:
     inputs:
       endpoint:
@@ -41,7 +41,7 @@ jobs:
   enrich:
     if: >-
       github.event_name == 'workflow_dispatch' && (inputs.endpoint == 'enrich' || inputs.endpoint == 'both')
-      || github.event_name == 'schedule' && github.event.schedule == '0 1,4,7,10,13,16,19,22 * * *'
+      || github.event_name == 'schedule' && github.event.schedule == '0 1,7,13,19 * * *'
     runs-on: ubuntu-latest
     steps:
       - name: Enrich person profiles

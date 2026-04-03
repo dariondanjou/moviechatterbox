@@ -249,10 +249,11 @@ async function processMovie(tmdbId: number): Promise<boolean> {
 }
 
 export async function GET(request: Request) {
-  // Verify cron secret (skip in development)
+  // Verify cron secret (skip in development; allow Vercel cron)
   if (CRON_SECRET) {
     const authHeader = request.headers.get("authorization");
-    if (authHeader !== `Bearer ${CRON_SECRET}`) {
+    const isVercelCron = request.headers.get("x-vercel-cron") === "1";
+    if (!isVercelCron && authHeader !== `Bearer ${CRON_SECRET}`) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
   }
@@ -266,53 +267,82 @@ export async function GET(request: Request) {
   let added = 0;
   const errors: string[] = [];
 
-  try {
-    // 1. Crawl trending movies
-    const trending = await tmdbFetch<{ results: { id: number }[] }>("/trending/movie/week");
-    for (const m of trending.results) {
-      if (Date.now() - startTime > maxRuntime) break;
+  // Helper to process a list of TMDB results within the time budget
+  async function processList(
+    label: string,
+    results: { id: number }[],
+  ) {
+    for (const m of results) {
+      if (Date.now() - startTime > maxRuntime) return;
       try {
         if (await processMovie(m.id)) added++;
-      } catch (e: any) { errors.push(`trending ${m.id}: ${e.message}`); }
-    }
-
-    // 2. Now playing
-    if (Date.now() - startTime < maxRuntime) {
-      const nowPlaying = await tmdbFetch<{ results: { id: number }[] }>("/movie/now_playing");
-      for (const m of nowPlaying.results) {
-        if (Date.now() - startTime > maxRuntime) break;
-        try {
-          if (await processMovie(m.id)) added++;
-        } catch (e: any) { errors.push(`now_playing ${m.id}: ${e.message}`); }
+      } catch (e: any) {
+        errors.push(`${label} ${m.id}: ${e.message}`);
       }
     }
+  }
 
-    // 3. Random discover page to catch new popular movies
+  try {
+    // 1. Trending movies this week
+    const trending = await tmdbFetch<{ results: { id: number }[] }>("/trending/movie/week");
+    await processList("trending", trending.results);
+
+    // 2. Now playing in theatres
     if (Date.now() - startTime < maxRuntime) {
-      const page = Math.floor(Math.random() * 100) + 1;
+      const nowPlaying = await tmdbFetch<{ results: { id: number }[] }>("/movie/now_playing");
+      await processList("now_playing", nowPlaying.results);
+    }
+
+    // 3. Upcoming movies
+    if (Date.now() - startTime < maxRuntime) {
+      const upcoming = await tmdbFetch<{ results: { id: number }[] }>("/movie/upcoming");
+      await processList("upcoming", upcoming.results);
+    }
+
+    // 4. Top rated page (random)
+    if (Date.now() - startTime < maxRuntime) {
+      const page = Math.floor(Math.random() * 50) + 1;
+      const topRated = await tmdbFetch<{ results: { id: number }[] }>(
+        `/movie/top_rated?page=${page}`
+      );
+      await processList("top_rated", topRated.results);
+    }
+
+    // 5. Multiple discover pages — vote count sorted (well-known movies)
+    for (let i = 0; i < 3 && Date.now() - startTime < maxRuntime; i++) {
+      const page = Math.floor(Math.random() * 200) + 1;
       const discover = await tmdbFetch<{ results: { id: number }[] }>(
         `/discover/movie?sort_by=vote_count.desc&vote_count.gte=100&page=${page}`
       );
-      for (const m of discover.results) {
-        if (Date.now() - startTime > maxRuntime) break;
-        try {
-          if (await processMovie(m.id)) added++;
-        } catch (e: any) { errors.push(`discover ${m.id}: ${e.message}`); }
-      }
+      await processList("discover_votes", discover.results);
     }
 
-    // 4. Popular movies page
-    if (Date.now() - startTime < maxRuntime) {
-      const page = Math.floor(Math.random() * 100) + 1;
+    // 6. Multiple discover pages — popularity sorted
+    for (let i = 0; i < 3 && Date.now() - startTime < maxRuntime; i++) {
+      const page = Math.floor(Math.random() * 200) + 1;
       const popular = await tmdbFetch<{ results: { id: number }[] }>(
         `/discover/movie?sort_by=popularity.desc&page=${page}`
       );
-      for (const m of popular.results) {
-        if (Date.now() - startTime > maxRuntime) break;
-        try {
-          if (await processMovie(m.id)) added++;
-        } catch (e: any) { errors.push(`popular ${m.id}: ${e.message}`); }
-      }
+      await processList("discover_popular", popular.results);
+    }
+
+    // 7. Discover by revenue (big box office films)
+    if (Date.now() - startTime < maxRuntime) {
+      const page = Math.floor(Math.random() * 100) + 1;
+      const revenue = await tmdbFetch<{ results: { id: number }[] }>(
+        `/discover/movie?sort_by=revenue.desc&page=${page}`
+      );
+      await processList("discover_revenue", revenue.results);
+    }
+
+    // 8. Discover highly rated recent films (last 10 years)
+    if (Date.now() - startTime < maxRuntime) {
+      const currentYear = new Date().getFullYear();
+      const page = Math.floor(Math.random() * 50) + 1;
+      const recent = await tmdbFetch<{ results: { id: number }[] }>(
+        `/discover/movie?sort_by=vote_average.desc&vote_count.gte=200&primary_release_date.gte=${currentYear - 10}-01-01&page=${page}`
+      );
+      await processList("discover_recent_rated", recent.results);
     }
   } catch (e: any) {
     errors.push(`fatal: ${e.message}`);
