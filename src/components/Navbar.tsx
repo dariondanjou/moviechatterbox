@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Search, Film, Mic, BookmarkPlus, User, LogOut, Menu, X, ChevronDown, Flame, Star
+  Search, Film, Mic, BookmarkPlus, User, LogOut, Menu, X, ChevronDown, Flame, Star, List
 } from "lucide-react";
 
 export default function Navbar() {
@@ -183,6 +183,11 @@ export default function Navbar() {
                         <BookmarkPlus className="w-4 h-4" /> Watchlist
                       </Link>
                     </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/lists" className="flex items-center gap-2 cursor-pointer">
+                        <List className="w-4 h-4" /> My Lists
+                      </Link>
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive cursor-pointer">
                       <LogOut className="w-4 h-4 mr-2" /> Sign Out
@@ -254,6 +259,14 @@ export default function Navbar() {
                   >
                     <BookmarkPlus className="w-4 h-4" />
                     Watchlist
+                  </Link>
+                  <Link
+                    href="/lists"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                  >
+                    <List className="w-4 h-4" />
+                    My Lists
                   </Link>
                   <button
                     onClick={() => { logout(); setMobileMenuOpen(false); }}

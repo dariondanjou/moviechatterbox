@@ -4,7 +4,7 @@ import { z } from "zod";
 import {
   movies, genres, persons, movieGenres, movieCast, movieCrew,
   ratings, reviews, watchlist, threads, threadReplies, audioRooms, roomParticipants, roomRelatedLinks,
-  users,
+  users, userLists, userListItems,
 } from "../shared/schema";
 import { eq, and, or, like, desc, asc, sql, inArray, ne, isNull } from "drizzle-orm";
 
@@ -589,6 +589,179 @@ const userRouter = router({
     }),
 });
 
+// ─── List Router ─────────────────────────────────────────────────────────────
+const listRouter = router({
+  // Get all lists for the authenticated user
+  myLists: protectedProcedure.query(async ({ ctx }) => {
+    const lists = await db
+      .select({
+        id: userLists.id, title: userLists.title, slug: userLists.slug,
+        description: userLists.description, isPublic: userLists.isPublic,
+        createdAt: userLists.createdAt, updatedAt: userLists.updatedAt,
+        itemCount: sql<number>`(SELECT count(*) FROM user_list_items WHERE list_id = ${userLists.id})`,
+      })
+      .from(userLists)
+      .where(eq(userLists.userId, ctx.userId))
+      .orderBy(desc(userLists.updatedAt));
+    return lists;
+  }),
+
+  // Get lists by user slug/id (public view)
+  byUser: publicProcedure
+    .input(z.object({ userId: z.number() }))
+    .query(async ({ input }) => {
+      const lists = await db
+        .select({
+          id: userLists.id, title: userLists.title, slug: userLists.slug,
+          description: userLists.description,
+          createdAt: userLists.createdAt,
+          itemCount: sql<number>`(SELECT count(*) FROM user_list_items WHERE list_id = ${userLists.id})`,
+        })
+        .from(userLists)
+        .where(and(eq(userLists.userId, input.userId), eq(userLists.isPublic, true)))
+        .orderBy(desc(userLists.updatedAt));
+      return lists;
+    }),
+
+  // Get a single list with items (public if public, or owner)
+  detail: publicProcedure
+    .input(z.object({ slug: z.string() }))
+    .query(async ({ input, ctx }) => {
+      const [list] = await db.select().from(userLists).where(eq(userLists.slug, input.slug)).limit(1);
+      if (!list) return null;
+
+      // If not public, only the owner can view
+      if (!list.isPublic && (!ctx.userId || ctx.userId !== list.userId)) return null;
+
+      const items = await db
+        .select({
+          id: userListItems.id, note: userListItems.note, order: userListItems.order,
+          movieId: movies.id, title: movies.title, slug: movies.slug,
+          year: movies.year, posterUrl: movies.posterUrl, imdbRating: movies.imdbRating,
+          runtime: movies.runtime, synopsis: movies.synopsis,
+        })
+        .from(userListItems)
+        .innerJoin(movies, eq(userListItems.movieId, movies.id))
+        .where(eq(userListItems.listId, list.id))
+        .orderBy(asc(userListItems.order));
+
+      // Get owner info
+      const [owner] = await db.select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl })
+        .from(users).where(eq(users.id, list.userId)).limit(1);
+
+      return { ...list, items, owner, isOwner: ctx.userId === list.userId };
+    }),
+
+  // Create a new list
+  create: protectedProcedure
+    .input(z.object({
+      title: z.string().min(1).max(500),
+      description: z.string().optional(),
+      isPublic: z.boolean().default(true),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const base = input.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+      const slug = `${base}-${Date.now()}`;
+      const [list] = await db.insert(userLists).values({
+        userId: ctx.userId, title: input.title, slug,
+        description: input.description, isPublic: input.isPublic,
+      }).returning({ id: userLists.id, slug: userLists.slug });
+      return list;
+    }),
+
+  // Update list title/description
+  update: protectedProcedure
+    .input(z.object({
+      listId: z.number(),
+      title: z.string().min(1).max(500).optional(),
+      description: z.string().optional(),
+      isPublic: z.boolean().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const [list] = await db.select().from(userLists)
+        .where(and(eq(userLists.id, input.listId), eq(userLists.userId, ctx.userId))).limit(1);
+      if (!list) throw new Error("List not found");
+      const updates: any = { updatedAt: new Date() };
+      if (input.title !== undefined) updates.title = input.title;
+      if (input.description !== undefined) updates.description = input.description;
+      if (input.isPublic !== undefined) updates.isPublic = input.isPublic;
+      await db.update(userLists).set(updates).where(eq(userLists.id, input.listId));
+      return { success: true };
+    }),
+
+  // Delete a list
+  delete: protectedProcedure
+    .input(z.object({ listId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const [list] = await db.select().from(userLists)
+        .where(and(eq(userLists.id, input.listId), eq(userLists.userId, ctx.userId))).limit(1);
+      if (!list) throw new Error("List not found");
+      await db.delete(userListItems).where(eq(userListItems.listId, input.listId));
+      await db.delete(userLists).where(eq(userLists.id, input.listId));
+      return { success: true };
+    }),
+
+  // Add a movie to a list
+  addItem: protectedProcedure
+    .input(z.object({ listId: z.number(), movieId: z.number(), note: z.string().optional() }))
+    .mutation(async ({ input, ctx }) => {
+      const [list] = await db.select().from(userLists)
+        .where(and(eq(userLists.id, input.listId), eq(userLists.userId, ctx.userId))).limit(1);
+      if (!list) throw new Error("List not found");
+      // Get next order
+      const [maxOrder] = await db.select({ max: sql<number>`coalesce(max(display_order), -1)` })
+        .from(userListItems).where(eq(userListItems.listId, input.listId));
+      await db.insert(userListItems).values({
+        listId: input.listId, movieId: input.movieId,
+        note: input.note, order: (maxOrder?.max ?? -1) + 1,
+      });
+      await db.update(userLists).set({ updatedAt: new Date() }).where(eq(userLists.id, input.listId));
+      return { success: true };
+    }),
+
+  // Remove item from list
+  removeItem: protectedProcedure
+    .input(z.object({ itemId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const [item] = await db.select({ listId: userListItems.listId })
+        .from(userListItems).where(eq(userListItems.id, input.itemId)).limit(1);
+      if (!item) throw new Error("Item not found");
+      const [list] = await db.select().from(userLists)
+        .where(and(eq(userLists.id, item.listId), eq(userLists.userId, ctx.userId))).limit(1);
+      if (!list) throw new Error("Not your list");
+      await db.delete(userListItems).where(eq(userListItems.id, input.itemId));
+      await db.update(userLists).set({ updatedAt: new Date() }).where(eq(userLists.id, item.listId));
+      return { success: true };
+    }),
+
+  // Update item note
+  updateItem: protectedProcedure
+    .input(z.object({ itemId: z.number(), note: z.string().optional() }))
+    .mutation(async ({ input, ctx }) => {
+      const [item] = await db.select({ listId: userListItems.listId })
+        .from(userListItems).where(eq(userListItems.id, input.itemId)).limit(1);
+      if (!item) throw new Error("Item not found");
+      const [list] = await db.select().from(userLists)
+        .where(and(eq(userLists.id, item.listId), eq(userLists.userId, ctx.userId))).limit(1);
+      if (!list) throw new Error("Not your list");
+      await db.update(userListItems).set({ note: input.note ?? null }).where(eq(userListItems.id, input.itemId));
+      return { success: true };
+    }),
+
+  // Reorder items
+  reorder: protectedProcedure
+    .input(z.object({ listId: z.number(), itemIds: z.array(z.number()) }))
+    .mutation(async ({ input, ctx }) => {
+      const [list] = await db.select().from(userLists)
+        .where(and(eq(userLists.id, input.listId), eq(userLists.userId, ctx.userId))).limit(1);
+      if (!list) throw new Error("Not your list");
+      for (let i = 0; i < input.itemIds.length; i++) {
+        await db.update(userListItems).set({ order: i }).where(eq(userListItems.id, input.itemIds[i]));
+      }
+      return { success: true };
+    }),
+});
+
 // ─── App Router ───────────────────────────────────────────────────────────────
 export const appRouter = router({
   movie: movieRouter,
@@ -600,6 +773,7 @@ export const appRouter = router({
   thread: threadRouter,
   room: roomRouter,
   user: userRouter,
+  list: listRouter,
 });
 
 export type AppRouter = typeof appRouter;

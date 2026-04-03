@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Star, Bookmark, MessageSquare, Film, Calendar, Award } from "lucide-react";
+import { Star, Bookmark, MessageSquare, Film, Calendar, Award, List } from "lucide-react";
 
 export default function UserProfile() {
   const { user, isAuthenticated, loading } = useAuth();
@@ -17,6 +17,7 @@ export default function UserProfile() {
   const { data: watchlist } = trpc.watchlist.list.useQuery(undefined, { enabled: isAuthenticated });
   const { data: myReviews } = trpc.review.myReviews.useQuery(undefined, { enabled: isAuthenticated });
   const { data: myRatings } = trpc.rating.myRatings.useQuery(undefined, { enabled: isAuthenticated });
+  const { data: myLists } = trpc.list.myLists.useQuery(undefined, { enabled: isAuthenticated });
 
   if (loading) {
     return (
@@ -48,6 +49,7 @@ export default function UserProfile() {
     { icon: <Bookmark className="w-4 h-4" />, label: "Watchlist", value: watchlist?.length || 0 },
     { icon: <Star className="w-4 h-4" />, label: "Rated", value: myRatings?.length || 0 },
     { icon: <MessageSquare className="w-4 h-4" />, label: "Reviews", value: myReviews?.length || 0 },
+    { icon: <List className="w-4 h-4" />, label: "Lists", value: myLists?.length || 0 },
   ];
 
   return (
@@ -73,7 +75,7 @@ export default function UserProfile() {
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-3 gap-4 mt-8 max-w-lg">
+          <div className="grid grid-cols-4 gap-4 mt-8 max-w-xl">
             {stats.map(s => (
               <div key={s.label} className="bg-card border border-border rounded-xl p-4 text-center">
                 <div className="flex items-center justify-center gap-1.5 text-primary mb-1">
@@ -92,6 +94,9 @@ export default function UserProfile() {
           <TabsList className="bg-secondary border border-border mb-6">
             <TabsTrigger value="watchlist" className="gap-1.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Bookmark className="w-3.5 h-3.5" /> Watchlist
+            </TabsTrigger>
+            <TabsTrigger value="lists" className="gap-1.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <List className="w-3.5 h-3.5" /> Lists
             </TabsTrigger>
             <TabsTrigger value="ratings" className="gap-1.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Star className="w-3.5 h-3.5" /> Ratings
@@ -125,6 +130,37 @@ export default function UserProfile() {
                 <p className="text-muted-foreground text-sm mb-4">Browse movies and add them to your watchlist</p>
                 <Link href="/browse">
                   <Button className="bg-primary text-primary-foreground hover:bg-primary/90">Browse Movies</Button>
+                </Link>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Lists */}
+          <TabsContent value="lists">
+            {myLists && myLists.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {myLists.map((list: any) => (
+                  <Link key={list.id} href={`/lists/${list.slug}`}>
+                    <div className="bg-card border border-border rounded-xl p-4 hover:border-primary/30 transition-colors">
+                      <h3 className="text-sm font-semibold text-foreground mb-1 line-clamp-1">{list.title}</h3>
+                      {list.description && (
+                        <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{list.description}</p>
+                      )}
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Film className="w-3 h-3" />
+                        <span>{list.itemCount} films</span>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-16">
+                <List className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                <h3 className="text-lg font-semibold text-foreground mb-2">No lists yet</h3>
+                <p className="text-muted-foreground text-sm mb-4">Create curated movie lists to share with others</p>
+                <Link href="/lists">
+                  <Button className="bg-primary text-primary-foreground hover:bg-primary/90">Create a List</Button>
                 </Link>
               </div>
             )}

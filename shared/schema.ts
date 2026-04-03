@@ -188,6 +188,32 @@ export const threadReplies = pgTable("thread_replies", {
 
 export type ThreadReply = typeof threadReplies.$inferSelect;
 
+// ─── User Lists ──────────────────────────────────────────────────────────────
+export const userLists = pgTable("user_lists", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  title: varchar("title", { length: 500 }).notNull(),
+  slug: varchar("slug", { length: 500 }).notNull().unique(),
+  description: text("description"),
+  isPublic: boolean("is_public").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type UserList = typeof userLists.$inferSelect;
+
+// ─── User List Items ─────────────────────────────────────────────────────────
+export const userListItems = pgTable("user_list_items", {
+  id: serial("id").primaryKey(),
+  listId: integer("list_id").notNull(),
+  movieId: integer("movie_id").notNull(),
+  note: text("note"),
+  order: integer("display_order").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type UserListItem = typeof userListItems.$inferSelect;
+
 // ─── Audio Rooms ──────────────────────────────────────────────────────────────
 export const audioRooms = pgTable("audio_rooms", {
   id: serial("id").primaryKey(),
