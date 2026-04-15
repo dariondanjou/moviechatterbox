@@ -24,11 +24,27 @@ export async function createContext(req: Request): Promise<Context> {
   const { users } = await import("../shared/schema");
   const { eq } = await import("drizzle-orm");
 
-  const [dbUser] = await db
+  let [dbUser] = await db
     .select({ id: users.id })
     .from(users)
     .where(eq(users.supabaseId, user.id))
     .limit(1);
+
+  // Auto-create user row on first authenticated request
+  if (!dbUser) {
+    const name = user.user_metadata?.name || user.user_metadata?.full_name || user.email?.split("@")[0] || "User";
+    const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture || null;
+    const [created] = await db
+      .insert(users)
+      .values({
+        supabaseId: user.id,
+        name,
+        email: user.email || null,
+        avatarUrl,
+      })
+      .returning({ id: users.id });
+    dbUser = created;
+  }
 
   return {
     userId: dbUser?.id ?? null,
