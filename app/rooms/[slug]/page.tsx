@@ -476,9 +476,9 @@ export default function RoomDetail() {
     }> = [];
 
     for (const p of dbParticipants) {
-      // Try to match with LiveKit participant for real-time audio state
+      // Match with LiveKit participant using the user ID (LiveKit identity is `user-{userId}`)
       const lkMatch = livekitParticipants.find(
-        (lk) => lk.identity === `user-${p.id}` || lk.name === p.userName
+        (lk) => lk.identity === `user-${(p as any).odUserId}` || lk.name === p.userName
       );
       // Check if this participant is the current user (match by name)
       const isMe = isCurrentRoom && user && p.userName === user.name;

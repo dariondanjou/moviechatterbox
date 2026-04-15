@@ -68,14 +68,17 @@ const AudioRoomContext = createContext<AudioRoomContextType>({
 });
 
 function getParticipantInfo(p: LocalParticipant | RemoteParticipant): RoomParticipantInfo {
-  const audioTrack = p.getTrackPublications().find(
-    (pub) => pub.track?.kind === Track.Kind.Audio
+  const pubs = p.getTrackPublications();
+  const micPub = pubs.find(
+    (pub) => pub.source === Track.Source.Microphone || pub.track?.kind === Track.Kind.Audio
   );
+  // isMuted = no mic track at all, or track exists but is muted
+  const isMuted = !micPub || !micPub.track || micPub.isMuted || micPub.track.isMuted;
   return {
     identity: p.identity,
     name: p.name || p.identity,
     isSpeaking: p.isSpeaking,
-    isMuted: audioTrack ? audioTrack.isMuted : true,
+    isMuted,
     isLocal: p instanceof LocalParticipant,
     audioLevel: p.audioLevel || 0,
   };
@@ -409,17 +412,16 @@ export function AudioRoomProvider({ children }: { children: ReactNode }) {
   const toggleMute = useCallback(async () => {
     const room = livekitRoomRef.current;
     if (room?.localParticipant) {
-      const currentMuted = isMuted;
-      if (currentMuted) {
-        // Unmute — enable mic
-        await room.localParticipant.setMicrophoneEnabled(true);
-      } else {
-        // Mute — disable mic
-        await room.localParticipant.setMicrophoneEnabled(false);
-      }
+      const newMuted = !isMuted;
+      // setMicrophoneEnabled(true) publishes mic, (false) unpublishes.
+      // LiveKit automatically propagates this to all participants via
+      // TrackMuted/TrackUnmuted/TrackSubscribed/TrackUnsubscribed events.
+      await room.localParticipant.setMicrophoneEnabled(!newMuted);
+      setIsMuted(newMuted);
+      setTimeout(() => updateParticipants(), 300);
+    } else {
+      setIsMuted((prev) => !prev);
     }
-    setIsMuted((prev) => !prev);
-    updateParticipants();
   }, [isMuted, updateParticipants]);
 
   // When going on/off stage, enable/disable mic
@@ -429,16 +431,18 @@ export function AudioRoomProvider({ children }: { children: ReactNode }) {
 
     if (room?.localParticipant) {
       if (onStage) {
-        // Going on stage — enable mic then immediately mute
+        // Going on stage — publish mic but start muted
+        // Enable mic so the track exists and other participants can see us on stage
         await room.localParticipant.setMicrophoneEnabled(true);
+        // Immediately disable to start muted — user must click Unmute to speak
         await room.localParticipant.setMicrophoneEnabled(false);
         setIsMuted(true);
       } else {
-        // Leaving stage — disable mic
+        // Leaving stage — unpublish mic entirely
         await room.localParticipant.setMicrophoneEnabled(false);
         setIsMuted(true);
       }
-      updateParticipants();
+      setTimeout(() => updateParticipants(), 200);
     }
   }, [updateParticipants]);
 

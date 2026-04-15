@@ -526,7 +526,9 @@ const roomRouter = router({
       // Participants
       const participants = await db
         .select({
-          id: roomParticipants.id, role: roomParticipants.role,
+          id: roomParticipants.id,
+          odUserId: roomParticipants.userId,
+          role: roomParticipants.role,
           isMuted: roomParticipants.isMuted, handRaised: roomParticipants.handRaised,
           joinedAt: roomParticipants.joinedAt,
           userName: sql<string>`(SELECT name FROM users WHERE id = ${roomParticipants.userId})`,
