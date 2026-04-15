@@ -507,14 +507,26 @@ export default function RoomDetail() {
     return { speakers: speakerList, audience: audienceList };
   }, [room?.participants, livekitParticipants, isCurrentRoom, user, isMuted, handRaised]);
 
-  // Auto-join the room when page loads
+  // Auto-join the room when page loads, restore stage status if returning
   const hasAutoJoined = useRef(false);
   useEffect(() => {
     if (room && room.isLive && isAuthenticated && !isCurrentRoom && !hasAutoJoined.current) {
       hasAutoJoined.current = true;
       joinRoom({ id: room.id, name: room.name, slug: room.slug });
+
+      // Restore stage status if user was on stage before leaving
+      try {
+        const savedStage = sessionStorage.getItem(`room-stage-${room.slug}`);
+        if (savedStage === "1") {
+          setTimeout(() => {
+            setIsOnStage(true);
+            updateRoleMutation.mutate({ roomId: room.id, role: "speaker" });
+          }, 1500); // wait for LiveKit connection
+        }
+        sessionStorage.removeItem(`room-stage-${room.slug}`);
+      } catch {}
     }
-  }, [room, isAuthenticated, isCurrentRoom, joinRoom]);
+  }, [room, isAuthenticated, isCurrentRoom, joinRoom, setIsOnStage, updateRoleMutation]);
 
   const handleLeave = () => {
     leaveRoom();

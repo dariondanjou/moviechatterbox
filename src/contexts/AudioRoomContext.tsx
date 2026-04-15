@@ -176,8 +176,26 @@ export function AudioRoomProvider({ children }: { children: ReactNode }) {
       // Set up event listeners
       room.on(RoomEvent.ParticipantConnected, updateParticipants);
       room.on(RoomEvent.ParticipantDisconnected, updateParticipants);
-      room.on(RoomEvent.TrackSubscribed, updateParticipants);
-      room.on(RoomEvent.TrackUnsubscribed, updateParticipants);
+
+      // When a remote audio track is subscribed, attach it to an <audio> element
+      // so the browser actually plays the sound through speakers
+      room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+        if (track.kind === Track.Kind.Audio) {
+          const audioEl = track.attach();
+          audioEl.id = `audio-${participant.identity}`;
+          document.body.appendChild(audioEl);
+        }
+        updateParticipants();
+      });
+
+      // When a remote audio track is unsubscribed, remove the <audio> element
+      room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+        if (track.kind === Track.Kind.Audio) {
+          track.detach().forEach((el) => el.remove());
+        }
+        updateParticipants();
+      });
+
       room.on(RoomEvent.TrackMuted, updateParticipants);
       room.on(RoomEvent.TrackUnmuted, updateParticipants);
       room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
@@ -363,6 +381,14 @@ export function AudioRoomProvider({ children }: { children: ReactNode }) {
   const disconnectLiveKit = useCallback(() => {
     const room = livekitRoomRef.current;
     if (room) {
+      // Detach and remove all audio elements before disconnecting
+      room.remoteParticipants.forEach((p) => {
+        p.getTrackPublications().forEach((pub) => {
+          if (pub.track?.kind === Track.Kind.Audio) {
+            pub.track.detach().forEach((el) => el.remove());
+          }
+        });
+      });
       room.disconnect();
       livekitRoomRef.current = null;
     }
@@ -480,12 +506,28 @@ export function AudioRoomProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [connectionState, updateParticipants]);
 
-  // Cleanup on unmount
+  // Auto-leave room when browser tab closes or navigates away
   useEffect(() => {
-    return () => {
+    const handleBeforeUnload = () => {
+      if (activeRoom) {
+        // Save stage status so we can restore on rejoin
+        try {
+          sessionStorage.setItem(`room-stage-${activeRoom.slug}`, isOnStage ? "1" : "0");
+        } catch {}
+        // Fire-and-forget leave request via simple API endpoint
+        navigator.sendBeacon(
+          "/api/rooms/leave",
+          new Blob([JSON.stringify({ roomId: activeRoom.id })], { type: "application/json" })
+        );
+      }
       disconnectLiveKit();
     };
-  }, [disconnectLiveKit]);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      disconnectLiveKit();
+    };
+  }, [activeRoom, isOnStage, disconnectLiveKit]);
 
   return (
     <AudioRoomContext.Provider value={{
