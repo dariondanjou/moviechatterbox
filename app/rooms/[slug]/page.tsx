@@ -483,7 +483,12 @@ export default function RoomDetail() {
       // Check if this participant is the current user (match by name)
       const isMe = isCurrentRoom && user && p.userName === user.name;
 
-      if (p.role === "speaker" || p.role === "host") {
+      // For the current user, use local isOnStage state (instant) instead of DB role (stale)
+      const effectiveRole = isMe
+        ? (isOnStage ? "speaker" : "listener")
+        : p.role;
+
+      if (effectiveRole === "speaker" || effectiveRole === "host") {
         speakerList.push({
           id: p.id,
           name: p.userName || "Unknown",
@@ -505,7 +510,7 @@ export default function RoomDetail() {
     }
 
     return { speakers: speakerList, audience: audienceList };
-  }, [room?.participants, livekitParticipants, isCurrentRoom, user, isMuted, handRaised]);
+  }, [room?.participants, livekitParticipants, isCurrentRoom, user, isMuted, isOnStage, handRaised]);
 
   // Auto-join the room when page loads, restore stage status if returning
   const hasAutoJoined = useRef(false);
