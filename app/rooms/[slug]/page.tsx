@@ -515,7 +515,15 @@ export default function RoomDetail() {
   // Auto-join the room when page loads, restore stage status if returning
   const hasAutoJoined = useRef(false);
   useEffect(() => {
-    if (room && room.isLive && isAuthenticated && !isCurrentRoom && !hasAutoJoined.current) {
+    if (!room || !room.isLive || !isAuthenticated || hasAutoJoined.current) return;
+
+    // Check if we need to (re)connect:
+    // - Not in any room yet (first visit)
+    // - Or in this room but LiveKit disconnected (came back after navigating away)
+    const needsJoin = !isCurrentRoom;
+    const needsReconnect = isCurrentRoom && connectionState === ConnectionState.Disconnected;
+
+    if (needsJoin || needsReconnect) {
       hasAutoJoined.current = true;
       joinRoom({ id: room.id, name: room.name, slug: room.slug });
 
@@ -526,12 +534,12 @@ export default function RoomDetail() {
           setTimeout(() => {
             setIsOnStage(true);
             updateRoleMutation.mutate({ roomId: room.id, role: "speaker" });
-          }, 1500); // wait for LiveKit connection
+          }, 1500);
         }
         sessionStorage.removeItem(`room-stage-${room.slug}`);
       } catch {}
     }
-  }, [room, isAuthenticated, isCurrentRoom, joinRoom, setIsOnStage, updateRoleMutation]);
+  }, [room, isAuthenticated, isCurrentRoom, connectionState, joinRoom, setIsOnStage, updateRoleMutation]);
 
   const handleLeave = () => {
     leaveRoom();
