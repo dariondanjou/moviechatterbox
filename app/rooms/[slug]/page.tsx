@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc";
@@ -8,12 +8,146 @@ import { useAudioRoom, RoomParticipantInfo } from "@/contexts/AudioRoomContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Slider } from "@/components/ui/slider";
 import { toast } from "sonner";
 import { ConnectionState } from "livekit-client";
 import {
   Mic, MicOff, PhoneOff, Hand, Users, Radio, Film, User,
-  ChevronLeft, Crown, Volume2, VolumeX, Share2, Flag, Wifi, WifiOff
+  ChevronLeft, Crown, Volume2, VolumeX, Share2, Flag, Wifi, WifiOff,
+  Play, Pause, Clock, SkipBack, SkipForward
 } from "lucide-react";
+
+function formatTime(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function RecordingPlayer({ url, duration }: { url: string; duration?: number | null }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [totalDuration, setTotalDuration] = useState(duration || 0);
+  const [playbackRate, setPlaybackRate] = useState(1);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const onDurationChange = () => {
+      if (audio.duration && isFinite(audio.duration)) {
+        setTotalDuration(audio.duration);
+      }
+    };
+    const onEnded = () => setIsPlaying(false);
+
+    audio.addEventListener("timeupdate", onTimeUpdate);
+    audio.addEventListener("durationchange", onDurationChange);
+    audio.addEventListener("ended", onEnded);
+    return () => {
+      audio.removeEventListener("timeupdate", onTimeUpdate);
+      audio.removeEventListener("durationchange", onDurationChange);
+      audio.removeEventListener("ended", onEnded);
+    };
+  }, []);
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (isPlaying) {
+      audio.pause();
+    } else {
+      audio.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  const seek = (value: number[]) => {
+    const audio = audioRef.current;
+    if (audio) {
+      audio.currentTime = value[0];
+      setCurrentTime(value[0]);
+    }
+  };
+
+  const skip = (seconds: number) => {
+    const audio = audioRef.current;
+    if (audio) {
+      audio.currentTime = Math.max(0, Math.min(audio.currentTime + seconds, totalDuration));
+    }
+  };
+
+  const cycleSpeed = () => {
+    const speeds = [1, 1.25, 1.5, 2];
+    const next = speeds[(speeds.indexOf(playbackRate) + 1) % speeds.length];
+    setPlaybackRate(next);
+    if (audioRef.current) audioRef.current.playbackRate = next;
+  };
+
+  return (
+    <div className="bg-card border border-border rounded-2xl p-6">
+      <audio ref={audioRef} src={url} preload="metadata" />
+
+      <div className="flex items-center gap-2 mb-4">
+        <Play className="w-4 h-4 text-primary" />
+        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Room Recording</h2>
+      </div>
+
+      {/* Waveform / Progress */}
+      <div className="mb-4">
+        <Slider
+          value={[currentTime]}
+          onValueChange={seek}
+          min={0}
+          max={totalDuration || 1}
+          step={0.1}
+          className="w-full"
+        />
+        <div className="flex justify-between mt-1.5">
+          <span className="text-xs text-muted-foreground">{formatTime(currentTime)}</span>
+          <span className="text-xs text-muted-foreground">{formatTime(totalDuration)}</span>
+        </div>
+      </div>
+
+      {/* Controls */}
+      <div className="flex items-center justify-center gap-3">
+        <button
+          onClick={() => skip(-15)}
+          className="p-2 rounded-full bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+          title="Back 15s"
+        >
+          <SkipBack className="w-4 h-4" />
+        </button>
+
+        <button
+          onClick={togglePlay}
+          className="p-3 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
+        </button>
+
+        <button
+          onClick={() => skip(30)}
+          className="p-2 rounded-full bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+          title="Forward 30s"
+        >
+          <SkipForward className="w-4 h-4" />
+        </button>
+
+        <button
+          onClick={cycleSpeed}
+          className="px-2.5 py-1 rounded-full bg-secondary text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+          title="Playback speed"
+        >
+          {playbackRate}x
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function UserBubble({ name, avatar, isMuted, isHost, handRaised, isSpeaking, audioLevel }: {
   name: string; avatar?: string | null; isMuted?: boolean; isHost?: boolean;
@@ -185,6 +319,7 @@ export default function RoomDetail() {
     try { return JSON.parse(room.tags || "[]"); } catch { return []; }
   })();
 
+  const isLive = room.isLive;
   const totalSpeakers = speakers.length + (isCurrentRoom && isOnStage ? 1 : 0);
   const totalAudience = audience.length + (isCurrentRoom && !isOnStage ? 1 : 0);
 
@@ -199,7 +334,7 @@ export default function RoomDetail() {
             </Button>
           </Link>
           <div className="flex items-center gap-2">
-            {isCurrentRoom && (
+            {isLive && isCurrentRoom && (
               <span className="flex items-center gap-1 text-xs text-muted-foreground mr-2">
                 {connectionState === ConnectionState.Connected ? (
                   <><Wifi className="w-3 h-3 text-green-500" /> Connected</>
@@ -210,8 +345,14 @@ export default function RoomDetail() {
                 )}
               </span>
             )}
-            <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-            <span className="text-xs font-bold text-primary uppercase tracking-wider">Live</span>
+            {isLive ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                <span className="text-xs font-bold text-primary uppercase tracking-wider">Live</span>
+              </>
+            ) : (
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Ended</span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
@@ -255,70 +396,122 @@ export default function RoomDetail() {
 
               {/* Stats */}
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Mic className="w-3.5 h-3.5" /> {totalSpeakers} speaking
-                </span>
-                <span className="flex items-center gap-1">
-                  <Users className="w-3.5 h-3.5" /> {totalAudience + (room.listenerCount || 0)} listening
-                </span>
-              </div>
-            </div>
-
-            {/* Stage -- Speakers */}
-            <div className="bg-card border border-border rounded-2xl p-6 mb-4">
-              <div className="flex items-center gap-2 mb-5">
-                <Mic className="w-4 h-4 text-primary" />
-                <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">On Stage</h2>
-              </div>
-              <div className="flex flex-wrap gap-4">
-                {speakers.length === 0 && !isCurrentRoom && (
-                  <p className="text-sm text-muted-foreground">No speakers yet — join and go on stage!</p>
-                )}
-                {speakers.map((s) => (
-                  <UserBubble
-                    key={s.id}
-                    name={s.name}
-                    avatar={s.avatar}
-                    isMuted={s.isMuted}
-                    isHost={s.isHost}
-                    isSpeaking={s.isSpeaking}
-                    audioLevel={s.audioLevel}
-                  />
-                ))}
-                {/* Current user on stage */}
-                {isCurrentRoom && isOnStage && user && (
-                  <UserBubble
-                    name={user.name || "You"}
-                    avatar={user.avatarUrl}
-                    isMuted={isMuted}
-                    isSpeaking={!isMuted}
-                  />
+                {isLive ? (
+                  <>
+                    <span className="flex items-center gap-1">
+                      <Mic className="w-3.5 h-3.5" /> {totalSpeakers} speaking
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Users className="w-3.5 h-3.5" /> {totalAudience + (room.listenerCount || 0)} listening
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" /> Ended {room.endedAt ? new Date(room.endedAt).toLocaleDateString() : ""}
+                    </span>
+                    {room.recordingDuration && (
+                      <span className="flex items-center gap-1">
+                        <Play className="w-3.5 h-3.5" /> {formatTime(room.recordingDuration)} recording
+                      </span>
+                    )}
+                    <span className="flex items-center gap-1">
+                      <Users className="w-3.5 h-3.5" /> {(room.participants || []).length} participated
+                    </span>
+                  </>
                 )}
               </div>
             </div>
 
-            {/* Audience -- Listeners */}
-            <div className="bg-card border border-border rounded-2xl p-6 mb-6">
-              <div className="flex items-center gap-2 mb-5">
-                <Users className="w-4 h-4 text-muted-foreground" />
-                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Audience</h2>
+            {/* Recording Player (past rooms) */}
+            {!isLive && room.recordingUrl && (
+              <div className="mb-6">
+                <RecordingPlayer url={room.recordingUrl} duration={room.recordingDuration} />
               </div>
-              <div className="flex flex-wrap gap-4">
-                {audience.length === 0 && !isCurrentRoom && (
-                  <p className="text-sm text-muted-foreground">No listeners yet — be the first to join!</p>
-                )}
-                {audience.map(a => (
-                  <UserBubble key={a.id} name={a.name} avatar={a.avatar} handRaised={a.handRaised} />
-                ))}
-                {/* Current user in audience */}
-                {isCurrentRoom && !isOnStage && user && (
-                  <UserBubble name={user.name || "You"} avatar={user.avatarUrl} handRaised={handRaised} />
-                )}
-              </div>
-            </div>
+            )}
 
-            {/* Join/Leave Controls */}
-            <div className="bg-card border border-border rounded-2xl p-4">
+            {/* No recording message (past rooms without recording) */}
+            {!isLive && !room.recordingUrl && (
+              <div className="bg-card border border-border rounded-2xl p-6 mb-6 text-center">
+                <VolumeX className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                <p className="text-sm text-muted-foreground">No recording available for this room</p>
+              </div>
+            )}
+
+            {/* Stage -- Speakers (only for live rooms) */}
+            {isLive && (
+              <div className="bg-card border border-border rounded-2xl p-6 mb-4">
+                <div className="flex items-center gap-2 mb-5">
+                  <Mic className="w-4 h-4 text-primary" />
+                  <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">On Stage</h2>
+                </div>
+                <div className="flex flex-wrap gap-4">
+                  {speakers.length === 0 && !isCurrentRoom && (
+                    <p className="text-sm text-muted-foreground">No speakers yet — join and go on stage!</p>
+                  )}
+                  {speakers.map((s) => (
+                    <UserBubble
+                      key={s.id}
+                      name={s.name}
+                      avatar={s.avatar}
+                      isMuted={s.isMuted}
+                      isHost={s.isHost}
+                      isSpeaking={s.isSpeaking}
+                      audioLevel={s.audioLevel}
+                    />
+                  ))}
+                  {/* Current user on stage */}
+                  {isCurrentRoom && isOnStage && user && (
+                    <UserBubble
+                      name={user.name || "You"}
+                      avatar={user.avatarUrl}
+                      isMuted={isMuted}
+                      isSpeaking={!isMuted}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Audience -- Listeners (only for live rooms) */}
+            {isLive && (
+              <div className="bg-card border border-border rounded-2xl p-6 mb-6">
+                <div className="flex items-center gap-2 mb-5">
+                  <Users className="w-4 h-4 text-muted-foreground" />
+                  <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Audience</h2>
+                </div>
+                <div className="flex flex-wrap gap-4">
+                  {audience.length === 0 && !isCurrentRoom && (
+                    <p className="text-sm text-muted-foreground">No listeners yet — be the first to join!</p>
+                  )}
+                  {audience.map(a => (
+                    <UserBubble key={a.id} name={a.name} avatar={a.avatar} handRaised={a.handRaised} />
+                  ))}
+                  {/* Current user in audience */}
+                  {isCurrentRoom && !isOnStage && user && (
+                    <UserBubble name={user.name || "You"} avatar={user.avatarUrl} handRaised={handRaised} />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Participants list (past rooms) */}
+            {!isLive && (room.participants || []).length > 0 && (
+              <div className="bg-card border border-border rounded-2xl p-6 mb-6">
+                <div className="flex items-center gap-2 mb-5">
+                  <Users className="w-4 h-4 text-muted-foreground" />
+                  <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Participants</h2>
+                </div>
+                <div className="flex flex-wrap gap-4">
+                  {[...speakers, ...audience].map(p => (
+                    <UserBubble key={p.id} name={p.name} avatar={p.avatar} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Join/Leave Controls (live only) */}
+            {isLive && <div className="bg-card border border-border rounded-2xl p-4">
               {!isCurrentRoom ? (
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-muted-foreground">
@@ -377,7 +570,7 @@ export default function RoomDetail() {
                   </Button>
                 </div>
               )}
-            </div>
+            </div>}
           </div>
 
           {/* Sidebar -- Related Content */}
@@ -471,18 +664,34 @@ export default function RoomDetail() {
                   <span className="text-muted-foreground">Participants</span>
                   <span className="text-foreground">{(room.participants || []).length}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Audio</span>
-                  <span className={connectionState === ConnectionState.Connected ? "text-green-500 font-medium" : "text-muted-foreground"}>
-                    {isCurrentRoom
-                      ? connectionState === ConnectionState.Connected ? "Connected" : connectionState === ConnectionState.Connecting ? "Connecting..." : "Not connected"
-                      : "Join to connect"
-                    }
-                  </span>
-                </div>
+                {isLive && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Audio</span>
+                    <span className={connectionState === ConnectionState.Connected ? "text-green-500 font-medium" : "text-muted-foreground"}>
+                      {isCurrentRoom
+                        ? connectionState === ConnectionState.Connected ? "Connected" : connectionState === ConnectionState.Connecting ? "Connecting..." : "Not connected"
+                        : "Join to connect"
+                      }
+                    </span>
+                  </div>
+                )}
+                {!isLive && room.endedAt && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Ended</span>
+                    <span className="text-foreground">{new Date(room.endedAt).toLocaleDateString()}</span>
+                  </div>
+                )}
+                {!isLive && room.recordingUrl && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Recording</span>
+                    <span className="text-green-500 font-medium">Available</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Status</span>
-                  <span className="text-primary font-medium">Live</span>
+                  <span className={isLive ? "text-primary font-medium" : "text-muted-foreground"}>
+                    {isLive ? "Live" : "Ended"}
+                  </span>
                 </div>
               </div>
             </div>

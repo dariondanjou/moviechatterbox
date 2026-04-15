@@ -462,6 +462,27 @@ const roomRouter = router({
     return rooms;
   }),
 
+  pastRooms: publicProcedure
+    .input(z.object({ limit: z.number().default(20), offset: z.number().default(0) }))
+    .query(async ({ input }) => {
+      const rooms = await db
+        .select({
+          id: audioRooms.id, name: audioRooms.name, slug: audioRooms.slug,
+          description: audioRooms.description, isLive: audioRooms.isLive,
+          listenerCount: audioRooms.listenerCount, speakerCount: audioRooms.speakerCount,
+          tags: audioRooms.tags, createdAt: audioRooms.createdAt, endedAt: audioRooms.endedAt,
+          recordingUrl: audioRooms.recordingUrl, recordingDuration: audioRooms.recordingDuration,
+          hostName: sql<string>`(SELECT name FROM users WHERE id = ${audioRooms.hostUserId})`,
+          hostAvatar: sql<string>`(SELECT avatar_url FROM users WHERE id = ${audioRooms.hostUserId})`,
+        })
+        .from(audioRooms)
+        .where(eq(audioRooms.isLive, false))
+        .orderBy(desc(audioRooms.endedAt))
+        .limit(input.limit)
+        .offset(input.offset);
+      return rooms;
+    }),
+
   detail: publicProcedure
     .input(z.object({ slug: z.string() }))
     .query(async ({ input }) => {

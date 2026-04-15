@@ -33,7 +33,7 @@ export interface RoomParticipantInfo {
 
 interface AudioRoomContextType {
   activeRoom: ActiveRoom | null;
-  joinRoom: (room: ActiveRoom) => void;
+  joinRoom: (room: ActiveRoom, isHost?: boolean) => void;
   leaveRoom: () => void;
   isMuted: boolean;
   toggleMute: () => void;
@@ -46,6 +46,7 @@ interface AudioRoomContextType {
   participants: RoomParticipantInfo[];
   connectionState: ConnectionState;
   livekitRoom: Room | null;
+  isRecording: boolean;
 }
 
 const AudioRoomContext = createContext<AudioRoomContextType>({
@@ -63,6 +64,7 @@ const AudioRoomContext = createContext<AudioRoomContextType>({
   participants: [],
   connectionState: ConnectionState.Disconnected,
   livekitRoom: null,
+  isRecording: false,
 });
 
 function getParticipantInfo(p: LocalParticipant | RemoteParticipant): RoomParticipantInfo {
@@ -89,7 +91,14 @@ export function AudioRoomProvider({ children }: { children: ReactNode }) {
   const [participants, setParticipants] = useState<RoomParticipantInfo[]>([]);
   const [connectionState, setConnectionState] = useState<ConnectionState>(ConnectionState.Disconnected);
 
+  const [isRecording, setIsRecording] = useState(false);
+
   const livekitRoomRef = useRef<Room | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingStartTimeRef = useRef<number>(0);
+  const isHostRef = useRef(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   const joinMutation = trpc.room.join.useMutation();
   const leaveMutation = trpc.room.leave.useMutation();
@@ -182,6 +191,121 @@ export function AudioRoomProvider({ children }: { children: ReactNode }) {
     }
   }, [user, updateParticipants]);
 
+  // Start recording all room audio (host only)
+  const startRecording = useCallback(() => {
+    const room = livekitRoomRef.current;
+    if (!room) return;
+
+    try {
+      const ctx = new AudioContext();
+      audioContextRef.current = ctx;
+      const destination = ctx.createMediaStreamDestination();
+
+      // Helper to connect a track to the mixer
+      const connectTrack = (mediaStream: MediaStream) => {
+        const source = ctx.createMediaStreamSource(mediaStream);
+        source.connect(destination);
+      };
+
+      // Connect all existing remote audio tracks
+      room.remoteParticipants.forEach((p) => {
+        p.getTrackPublications().forEach((pub) => {
+          if (pub.track?.kind === Track.Kind.Audio && pub.track?.mediaStreamTrack) {
+            const ms = new MediaStream([pub.track.mediaStreamTrack]);
+            connectTrack(ms);
+          }
+        });
+      });
+
+      // Connect local mic if publishing
+      const localAudio = room.localParticipant.getTrackPublications().find(
+        (pub) => pub.track?.kind === Track.Kind.Audio
+      );
+      if (localAudio?.track?.mediaStreamTrack) {
+        const ms = new MediaStream([localAudio.track.mediaStreamTrack]);
+        connectTrack(ms);
+      }
+
+      // Also connect new tracks as they arrive
+      room.on(RoomEvent.TrackSubscribed, (_track, pub) => {
+        if (pub.track?.kind === Track.Kind.Audio && pub.track?.mediaStreamTrack) {
+          const ms = new MediaStream([pub.track.mediaStreamTrack]);
+          connectTrack(ms);
+        }
+      });
+
+      const recorder = new MediaRecorder(destination.stream, {
+        mimeType: "audio/webm;codecs=opus",
+      });
+
+      recordedChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          recordedChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.start(1000); // collect data every second
+      mediaRecorderRef.current = recorder;
+      recordingStartTimeRef.current = Date.now();
+      setIsRecording(true);
+    } catch (err) {
+      console.error("Failed to start recording:", err);
+    }
+  }, []);
+
+  // Stop recording and upload
+  const stopRecordingAndUpload = useCallback(async (roomId: number) => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === "inactive") return;
+
+    return new Promise<void>((resolve) => {
+      recorder.onstop = async () => {
+        const duration = Math.round((Date.now() - recordingStartTimeRef.current) / 1000);
+        const blob = new Blob(recordedChunksRef.current, { type: "audio/webm" });
+        recordedChunksRef.current = [];
+        mediaRecorderRef.current = null;
+        setIsRecording(false);
+
+        // Close audio context
+        audioContextRef.current?.close();
+        audioContextRef.current = null;
+
+        // Only upload if we have meaningful audio (> 5 seconds)
+        if (duration < 5) {
+          resolve();
+          return;
+        }
+
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const formData = new FormData();
+          formData.append("recording", blob, "recording.webm");
+          formData.append("roomId", String(roomId));
+          formData.append("duration", String(duration));
+
+          const res = await fetch("/api/recordings/upload", {
+            method: "POST",
+            headers: {
+              ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+            },
+            body: formData,
+          });
+
+          if (res.ok) {
+            toast.success("Room recording saved!");
+          } else {
+            console.error("Recording upload failed:", await res.text());
+          }
+        } catch (err) {
+          console.error("Recording upload error:", err);
+        }
+        resolve();
+      };
+      recorder.stop();
+    });
+  }, []);
+
   // Disconnect from LiveKit
   const disconnectLiveKit = useCallback(() => {
     const room = livekitRoomRef.current;
@@ -193,7 +317,7 @@ export function AudioRoomProvider({ children }: { children: ReactNode }) {
     setConnectionState(ConnectionState.Disconnected);
   }, []);
 
-  const joinRoom = useCallback((room: ActiveRoom) => {
+  const joinRoom = useCallback((room: ActiveRoom, isHost = false) => {
     // Disconnect from any existing room first
     disconnectLiveKit();
 
@@ -201,15 +325,26 @@ export function AudioRoomProvider({ children }: { children: ReactNode }) {
     setIsMuted(true);
     setIsOnStageState(false);
     setHandRaised(false);
+    isHostRef.current = isHost;
     joinMutation.mutate({ roomId: room.id });
     toast.success(`Joined "${room.name}"`);
 
-    // Connect to LiveKit
-    connectToLiveKit(room.slug);
-  }, [joinMutation, connectToLiveKit, disconnectLiveKit]);
+    // Connect to LiveKit, then start recording if host
+    connectToLiveKit(room.slug).then(() => {
+      if (isHost && livekitRoomRef.current) {
+        // Small delay to let tracks connect
+        setTimeout(() => startRecording(), 2000);
+      }
+    });
+  }, [joinMutation, connectToLiveKit, disconnectLiveKit, startRecording]);
 
-  const leaveRoom = useCallback(() => {
+  const leaveRoom = useCallback(async () => {
     if (activeRoom) {
+      // If host is recording, stop and upload before leaving
+      if (isHostRef.current && mediaRecorderRef.current) {
+        toast.info("Saving recording...");
+        await stopRecordingAndUpload(activeRoom.id);
+      }
       leaveMutation.mutate({ roomId: activeRoom.id });
       toast.info(`Left "${activeRoom.name}"`);
     }
@@ -218,7 +353,8 @@ export function AudioRoomProvider({ children }: { children: ReactNode }) {
     setIsOnStageState(false);
     setHandRaised(false);
     setIsMuted(true);
-  }, [activeRoom, leaveMutation, disconnectLiveKit]);
+    isHostRef.current = false;
+  }, [activeRoom, leaveMutation, disconnectLiveKit, stopRecordingAndUpload]);
 
   const toggleMute = useCallback(async () => {
     const room = livekitRoomRef.current;
@@ -307,6 +443,7 @@ export function AudioRoomProvider({ children }: { children: ReactNode }) {
       participants,
       connectionState,
       livekitRoom: livekitRoomRef.current,
+      isRecording,
     }}>
       {children}
     </AudioRoomContext.Provider>

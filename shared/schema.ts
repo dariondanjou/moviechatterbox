@@ -228,6 +228,8 @@ export const audioRooms = pgTable("audio_rooms", {
   listenerCount: integer("listener_count").default(0),
   speakerCount: integer("speaker_count").default(0),
   tags: text("tags"),
+  recordingUrl: text("recording_url"),
+  recordingDuration: integer("recording_duration"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   endedAt: timestamp("ended_at"),
 });
