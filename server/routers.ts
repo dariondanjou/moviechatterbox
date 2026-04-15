@@ -677,6 +677,19 @@ const roomRouter = router({
       return { success: true };
     }),
 
+  muteParticipant: protectedProcedure
+    .input(z.object({ roomId: z.number(), targetUserId: z.number(), muted: z.boolean() }))
+    .mutation(async ({ input, ctx }) => {
+      const [room] = await db.select().from(audioRooms).where(eq(audioRooms.id, input.roomId)).limit(1);
+      if (!room || room.hostUserId !== ctx.userId) {
+        throw new Error("Only the host can mute/unmute other participants");
+      }
+      await db.update(roomParticipants)
+        .set({ isMuted: input.muted })
+        .where(and(eq(roomParticipants.roomId, input.roomId), eq(roomParticipants.userId, input.targetUserId), isNull(roomParticipants.leftAt)));
+      return { success: true };
+    }),
+
   makeHost: protectedProcedure
     .input(z.object({ roomId: z.number(), targetUserId: z.number() }))
     .mutation(async ({ input, ctx }) => {

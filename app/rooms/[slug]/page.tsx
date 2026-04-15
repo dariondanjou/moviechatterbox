@@ -386,9 +386,10 @@ function RecordingPlayer({
   );
 }
 
-function UserBubble({ name, avatar, isMuted, isHost, handRaised, isSpeaking, audioLevel }: {
+function UserBubble({ name, avatar, isMuted, isHost, handRaised, isSpeaking, audioLevel, onMicClick }: {
   name: string; avatar?: string | null; isMuted?: boolean; isHost?: boolean;
   handRaised?: boolean; isSpeaking?: boolean; audioLevel?: number;
+  onMicClick?: () => void;
 }) {
   const initials = name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
   const ringScale = isSpeaking ? Math.min(1 + (audioLevel || 0) * 0.5, 1.15) : 1;
@@ -413,11 +414,21 @@ function UserBubble({ name, avatar, isMuted, isHost, handRaised, isSpeaking, aud
             ))}
           </div>
         )}
-        {/* Muted icon */}
-        {isMuted && (
-          <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-destructive flex items-center justify-center">
-            <MicOff className="w-3 h-3 text-white" />
-          </div>
+        {/* Mic icon — clickable if onMicClick provided */}
+        {isMuted !== undefined && (
+          <button
+            onClick={onMicClick}
+            disabled={!onMicClick}
+            className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center transition-colors ${
+              onMicClick ? "cursor-pointer hover:scale-110" : "cursor-default"
+            } ${isMuted ? "bg-destructive" : "bg-primary"}`}
+            title={onMicClick ? (isMuted ? "Unmute" : "Mute") : undefined}
+          >
+            {isMuted
+              ? <MicOff className="w-3 h-3 text-white" />
+              : <Mic className="w-3 h-3 text-white" />
+            }
+          </button>
         )}
         {/* Host crown */}
         {isHost && (
@@ -466,6 +477,9 @@ export default function RoomDetail() {
       router.push("/rooms");
     },
     onError: () => toast.error("Failed to close room"),
+  });
+  const muteParticipantMutation = trpc.room.muteParticipant.useMutation({
+    onSuccess: () => refetch(),
   });
   const makeHostMutation = trpc.room.makeHost.useMutation({
     onSuccess: () => {
@@ -734,7 +748,11 @@ export default function RoomDetail() {
                   {speakers.length === 0 && !isCurrentRoom && (
                     <p className="text-sm text-muted-foreground">No speakers yet — join and go on stage!</p>
                   )}
-                  {speakers.map((s) => (
+                  {speakers.map((s) => {
+                    const isMe = user && s.name === user.name;
+                    // Self can always toggle own mic; host can toggle anyone's
+                    const canToggleMic = isMe || isRoomHost;
+                    return (
                     <div key={s.id} className="relative group">
                       <UserBubble
                         name={s.name}
@@ -743,6 +761,17 @@ export default function RoomDetail() {
                         isHost={s.isHost}
                         isSpeaking={s.isSpeaking}
                         audioLevel={s.audioLevel}
+                        onMicClick={canToggleMic ? () => {
+                          if (isMe) {
+                            toggleMute();
+                          } else {
+                            muteParticipantMutation.mutate({
+                              roomId: room!.id,
+                              targetUserId: s.odUserId,
+                              muted: !s.isMuted,
+                            });
+                          }
+                        } : undefined}
                       />
                       {/* Make Host button — only visible to room creator, on other speakers */}
                       {isRoomHost && !s.isHost && user && s.name !== user.name && (
@@ -759,7 +788,7 @@ export default function RoomDetail() {
                         </button>
                       )}
                     </div>
-                  ))}
+                  );})}
                   {/* Current user on stage (only if not already in DB list) */}
                   {isCurrentRoom && isOnStage && user && !speakers.some(s => s.name === user.name) && (
                     <UserBubble
@@ -767,6 +796,7 @@ export default function RoomDetail() {
                       avatar={user.avatarUrl}
                       isMuted={isMuted}
                       isSpeaking={!isMuted}
+                      onMicClick={toggleMute}
                     />
                   )}
                 </div>
