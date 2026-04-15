@@ -525,28 +525,31 @@ export function AudioRoomProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [connectionState, updateParticipants]);
 
-  // Auto-leave room when browser tab closes or navigates away
+  // Keep refs for beforeunload so the effect doesn't re-run on state changes
+  const activeRoomRef = useRef(activeRoom);
+  const isOnStageRef = useRef(isOnStage);
+  activeRoomRef.current = activeRoom;
+  isOnStageRef.current = isOnStage;
+
+  // Auto-leave room when browser tab closes — runs once, reads refs
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (activeRoom) {
-        // Save stage status so we can restore on rejoin
+      const room = activeRoomRef.current;
+      if (room) {
         try {
-          sessionStorage.setItem(`room-stage-${activeRoom.slug}`, isOnStage ? "1" : "0");
+          sessionStorage.setItem(`room-stage-${room.slug}`, isOnStageRef.current ? "1" : "0");
         } catch {}
-        // Fire-and-forget leave request via simple API endpoint
         navigator.sendBeacon(
           "/api/rooms/leave",
-          new Blob([JSON.stringify({ roomId: activeRoom.id })], { type: "application/json" })
+          new Blob([JSON.stringify({ roomId: room.id })], { type: "application/json" })
         );
       }
-      disconnectLiveKit();
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
-      disconnectLiveKit();
     };
-  }, [activeRoom, isOnStage, disconnectLiveKit]);
+  }, []);
 
   return (
     <AudioRoomContext.Provider value={{
