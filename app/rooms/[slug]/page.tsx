@@ -472,7 +472,6 @@ export default function RoomDetail() {
   });
   const endRoomMutation = trpc.room.endRoom.useMutation({
     onSuccess: () => {
-      leaveRoom();
       toast.success("Room closed");
       router.push("/rooms");
     },
@@ -556,7 +555,7 @@ export default function RoomDetail() {
 
     if (needsJoin || needsReconnect) {
       hasAutoJoined.current = true;
-      joinRoom({ id: room.id, name: room.name, slug: room.slug });
+      joinRoom({ id: room.id, name: room.name, slug: room.slug }, isRoomHost);
 
       // Restore stage status if user was on stage before leaving
       try {
@@ -570,7 +569,7 @@ export default function RoomDetail() {
         sessionStorage.removeItem(`room-stage-${room.slug}`);
       } catch {}
     }
-  }, [room, isAuthenticated, isCurrentRoom, connectionState, joinRoom, setIsOnStage, updateRoleMutation]);
+  }, [room, isAuthenticated, isCurrentRoom, isRoomHost, connectionState, joinRoom, setIsOnStage, updateRoleMutation]);
 
   const handleLeave = () => {
     leaveRoom();
@@ -903,8 +902,10 @@ export default function RoomDetail() {
                     {/* Close Room — only for host */}
                     {isRoomHost && (
                       <Button
-                        onClick={() => {
+                        onClick={async () => {
                           if (confirm("Close this room for everyone? This ends the conversation.")) {
+                            // Save recording before closing
+                            await leaveRoom();
                             endRoomMutation.mutate({ roomId: room!.id });
                           }
                         }}
