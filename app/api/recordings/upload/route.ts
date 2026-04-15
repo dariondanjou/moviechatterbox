@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
   const file = formData.get("recording") as File | null;
   const roomId = formData.get("roomId") as string | null;
   const duration = formData.get("duration") as string | null;
+  const speakerTimeline = formData.get("speakerTimeline") as string | null;
 
   if (!file || !roomId) {
     return NextResponse.json({ error: "recording and roomId required" }, { status: 400 });
@@ -38,14 +39,27 @@ export async function POST(req: NextRequest) {
       contentType: file.type || "audio/webm",
     });
 
-    // Save recording URL to database
+    // Save recording URL + speaker timeline to database
     await db
       .update(audioRooms)
       .set({
         recordingUrl: blob.url,
         recordingDuration: duration ? parseInt(duration) : null,
+        speakerTimeline: speakerTimeline || null,
       })
       .where(eq(audioRooms.id, room.id));
+
+    // Trigger transcription in the background (fire and forget)
+    const baseUrl = req.nextUrl.origin;
+    fetch(`${baseUrl}/api/recordings/transcribe`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        roomId: room.id,
+        recordingUrl: blob.url,
+        speakerTimeline: speakerTimeline || "[]",
+      }),
+    }).catch((err) => console.error("Transcription trigger failed:", err));
 
     return NextResponse.json({ url: blob.url });
   } catch (err) {

@@ -100,6 +100,10 @@ export function AudioRoomProvider({ children }: { children: ReactNode }) {
   const isHostRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
 
+  // Speaker timeline tracking — records who spoke when
+  const speakerTimelineRef = useRef<Array<{ identity: string; name: string; start: number; end: number }>>([]);
+  const activeSpeakersRef = useRef<Map<string, { name: string; startTime: number }>>(new Map());
+
   const joinMutation = trpc.room.join.useMutation();
   const leaveMutation = trpc.room.leave.useMutation();
   const raiseHandMutation = trpc.room.raiseHand.useMutation();
@@ -173,7 +177,37 @@ export function AudioRoomProvider({ children }: { children: ReactNode }) {
       room.on(RoomEvent.TrackUnsubscribed, updateParticipants);
       room.on(RoomEvent.TrackMuted, updateParticipants);
       room.on(RoomEvent.TrackUnmuted, updateParticipants);
-      room.on(RoomEvent.ActiveSpeakersChanged, updateParticipants);
+      room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+        updateParticipants();
+
+        // Track speaker timeline for transcription
+        if (!isHostRef.current || !recordingStartTimeRef.current) return;
+        const now = (Date.now() - recordingStartTimeRef.current) / 1000;
+        const currentSpeakerIds = new Set(speakers.map((s) => s.identity));
+
+        // Close segments for speakers who stopped
+        activeSpeakersRef.current.forEach((info, identity) => {
+          if (!currentSpeakerIds.has(identity)) {
+            speakerTimelineRef.current.push({
+              identity,
+              name: info.name,
+              start: info.startTime,
+              end: now,
+            });
+            activeSpeakersRef.current.delete(identity);
+          }
+        });
+
+        // Open segments for new speakers
+        speakers.forEach((s) => {
+          if (!activeSpeakersRef.current.has(s.identity)) {
+            activeSpeakersRef.current.set(s.identity, {
+              name: s.name || s.identity,
+              startTime: now,
+            });
+          }
+        });
+      });
       room.on(RoomEvent.ConnectionStateChanged, (state) => {
         setConnectionState(state);
       });
@@ -271,6 +305,21 @@ export function AudioRoomProvider({ children }: { children: ReactNode }) {
         audioContextRef.current?.close();
         audioContextRef.current = null;
 
+        // Flush any still-active speakers into the timeline
+        const endTime = duration;
+        activeSpeakersRef.current.forEach((info, identity) => {
+          speakerTimelineRef.current.push({
+            identity,
+            name: info.name,
+            start: info.startTime,
+            end: endTime,
+          });
+        });
+        activeSpeakersRef.current.clear();
+
+        const timeline = [...speakerTimelineRef.current];
+        speakerTimelineRef.current = [];
+
         // Only upload if we have meaningful audio (> 5 seconds)
         if (duration < 5) {
           resolve();
@@ -283,6 +332,7 @@ export function AudioRoomProvider({ children }: { children: ReactNode }) {
           formData.append("recording", blob, "recording.webm");
           formData.append("roomId", String(roomId));
           formData.append("duration", String(duration));
+          formData.append("speakerTimeline", JSON.stringify(timeline));
 
           const res = await fetch("/api/recordings/upload", {
             method: "POST",

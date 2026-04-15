@@ -230,6 +230,8 @@ export const audioRooms = pgTable("audio_rooms", {
   tags: text("tags"),
   recordingUrl: text("recording_url"),
   recordingDuration: integer("recording_duration"),
+  speakerTimeline: text("speaker_timeline"),
+  transcript: text("transcript"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   endedAt: timestamp("ended_at"),
 });

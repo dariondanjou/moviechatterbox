@@ -25,25 +25,115 @@ function formatTime(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-function RecordingPlayer({ url, duration }: { url: string; duration?: number | null }) {
+interface TranscriptSegment {
+  speaker: string;
+  speakerName: string;
+  text: string;
+  start: number;
+  end: number;
+}
+
+interface SpeakerTimelineEntry {
+  identity: string;
+  name: string;
+  start: number;
+  end: number;
+}
+
+// Assign consistent colors to speakers
+const SPEAKER_COLORS = [
+  "bg-primary/20 text-primary border-primary/40",
+  "bg-green-500/20 text-green-400 border-green-500/40",
+  "bg-purple-500/20 text-purple-400 border-purple-500/40",
+  "bg-yellow-500/20 text-yellow-400 border-yellow-500/40",
+  "bg-pink-500/20 text-pink-400 border-pink-500/40",
+  "bg-cyan-500/20 text-cyan-400 border-cyan-500/40",
+];
+
+const SPEAKER_DOT_COLORS = [
+  "bg-primary", "bg-green-500", "bg-purple-500",
+  "bg-yellow-500", "bg-pink-500", "bg-cyan-500",
+];
+
+function RecordingPlayer({
+  url, duration, transcript, speakerTimeline,
+}: {
+  url: string;
+  duration?: number | null;
+  transcript?: TranscriptSegment[];
+  speakerTimeline?: SpeakerTimelineEntry[];
+}) {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const transcriptContainerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [totalDuration, setTotalDuration] = useState(duration || 0);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const [showTranscript, setShowTranscript] = useState(true);
+
+  // Build unique speaker list for color assignment
+  const speakerMap = useMemo(() => {
+    const map = new Map<string, number>();
+    const segments = transcript || [];
+    segments.forEach((seg) => {
+      if (!map.has(seg.speaker)) {
+        map.set(seg.speaker, map.size);
+      }
+    });
+    // Also include speakers from timeline
+    (speakerTimeline || []).forEach((seg) => {
+      if (!map.has(seg.identity)) {
+        map.set(seg.identity, map.size);
+      }
+    });
+    return map;
+  }, [transcript, speakerTimeline]);
+
+  // Which speakers are "active" at the current playback time
+  const activeSpeakers = useMemo(() => {
+    const active = new Set<string>();
+    (speakerTimeline || []).forEach((seg) => {
+      if (currentTime >= seg.start && currentTime <= seg.end) {
+        active.add(seg.identity);
+      }
+    });
+    // Also check transcript segments
+    (transcript || []).forEach((seg) => {
+      if (currentTime >= seg.start && currentTime <= seg.end) {
+        active.add(seg.speaker);
+      }
+    });
+    return active;
+  }, [currentTime, speakerTimeline, transcript]);
+
+  // All unique speakers for the bubble row
+  const allSpeakers = useMemo(() => {
+    const seen = new Map<string, string>();
+    (speakerTimeline || []).forEach((s) => {
+      if (!seen.has(s.identity)) seen.set(s.identity, s.name);
+    });
+    (transcript || []).forEach((s) => {
+      if (!seen.has(s.speaker)) seen.set(s.speaker, s.speakerName);
+    });
+    return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
+  }, [speakerTimeline, transcript]);
+
+  // Current transcript segment index
+  const currentSegmentIndex = useMemo(() => {
+    if (!transcript) return -1;
+    return transcript.findIndex(
+      (seg) => currentTime >= seg.start && currentTime <= seg.end
+    );
+  }, [currentTime, transcript]);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-
     const onTimeUpdate = () => setCurrentTime(audio.currentTime);
     const onDurationChange = () => {
-      if (audio.duration && isFinite(audio.duration)) {
-        setTotalDuration(audio.duration);
-      }
+      if (audio.duration && isFinite(audio.duration)) setTotalDuration(audio.duration);
     };
     const onEnded = () => setIsPlaying(false);
-
     audio.addEventListener("timeupdate", onTimeUpdate);
     audio.addEventListener("durationchange", onDurationChange);
     audio.addEventListener("ended", onEnded);
@@ -54,30 +144,35 @@ function RecordingPlayer({ url, duration }: { url: string; duration?: number | n
     };
   }, []);
 
+  // Auto-scroll transcript to current segment
+  useEffect(() => {
+    if (currentSegmentIndex < 0 || !transcriptContainerRef.current) return;
+    const el = transcriptContainerRef.current.children[currentSegmentIndex] as HTMLElement;
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [currentSegmentIndex]);
+
   const togglePlay = () => {
     const audio = audioRef.current;
     if (!audio) return;
-    if (isPlaying) {
-      audio.pause();
-    } else {
-      audio.play();
-    }
+    if (isPlaying) { audio.pause(); } else { audio.play(); }
     setIsPlaying(!isPlaying);
   };
 
   const seek = (value: number[]) => {
     const audio = audioRef.current;
-    if (audio) {
-      audio.currentTime = value[0];
-      setCurrentTime(value[0]);
-    }
+    if (audio) { audio.currentTime = value[0]; setCurrentTime(value[0]); }
+  };
+
+  const seekToTime = (time: number) => {
+    const audio = audioRef.current;
+    if (audio) { audio.currentTime = time; setCurrentTime(time); if (!isPlaying) { audio.play(); setIsPlaying(true); } }
   };
 
   const skip = (seconds: number) => {
     const audio = audioRef.current;
-    if (audio) {
-      audio.currentTime = Math.max(0, Math.min(audio.currentTime + seconds, totalDuration));
-    }
+    if (audio) { audio.currentTime = Math.max(0, Math.min(audio.currentTime + seconds, totalDuration)); }
   };
 
   const cycleSpeed = () => {
@@ -88,63 +183,205 @@ function RecordingPlayer({ url, duration }: { url: string; duration?: number | n
   };
 
   return (
-    <div className="bg-card border border-border rounded-2xl p-6">
-      <audio ref={audioRef} src={url} preload="metadata" />
+    <div className="space-y-4">
+      {/* Player Card */}
+      <div className="bg-card border border-border rounded-2xl p-6">
+        <audio ref={audioRef} src={url} preload="metadata" />
 
-      <div className="flex items-center gap-2 mb-4">
-        <Play className="w-4 h-4 text-primary" />
-        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Room Recording</h2>
-      </div>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Play className="w-4 h-4 text-primary" />
+            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Room Recording</h2>
+          </div>
+          {transcript && transcript.length > 0 && (
+            <button
+              onClick={() => setShowTranscript(!showTranscript)}
+              className="text-xs text-primary hover:underline"
+            >
+              {showTranscript ? "Hide Transcript" : "Show Transcript"}
+            </button>
+          )}
+        </div>
 
-      {/* Waveform / Progress */}
-      <div className="mb-4">
-        <Slider
-          value={[currentTime]}
-          onValueChange={seek}
-          min={0}
-          max={totalDuration || 1}
-          step={0.1}
-          className="w-full"
-        />
-        <div className="flex justify-between mt-1.5">
-          <span className="text-xs text-muted-foreground">{formatTime(currentTime)}</span>
-          <span className="text-xs text-muted-foreground">{formatTime(totalDuration)}</span>
+        {/* Active Speakers — mini bubbles showing who's talking now */}
+        {allSpeakers.length > 0 && (
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
+            {allSpeakers.map((s) => {
+              const colorIdx = (speakerMap.get(s.id) || 0) % SPEAKER_COLORS.length;
+              const isActive = activeSpeakers.has(s.id);
+              const initials = s.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+              return (
+                <div
+                  key={s.id}
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-full border text-xs font-medium transition-all ${
+                    isActive
+                      ? SPEAKER_COLORS[colorIdx]
+                      : "bg-secondary/50 text-muted-foreground border-border opacity-50"
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                    isActive ? SPEAKER_DOT_COLORS[colorIdx] + " text-white" : "bg-muted text-muted-foreground"
+                  }`}>
+                    {initials}
+                  </div>
+                  <span>{s.name.split(" ")[0]}</span>
+                  {isActive && (
+                    <div className="flex items-end gap-px h-3 ml-0.5">
+                      {[1,2,3].map(i => (
+                        <div key={i} className={`w-0.5 rounded-full waveform-bar ${SPEAKER_DOT_COLORS[colorIdx]}`} style={{ height: "100%" }} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Speaker Activity Timeline Bar */}
+        {speakerTimeline && speakerTimeline.length > 0 && totalDuration > 0 && (
+          <div className="mb-3">
+            <div className="relative h-6 bg-secondary rounded-lg overflow-hidden cursor-pointer" onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const pct = (e.clientX - rect.left) / rect.width;
+              seekToTime(pct * totalDuration);
+            }}>
+              {speakerTimeline.map((seg, i) => {
+                const colorIdx = (speakerMap.get(seg.identity) || 0) % SPEAKER_DOT_COLORS.length;
+                const left = (seg.start / totalDuration) * 100;
+                const width = Math.max(((seg.end - seg.start) / totalDuration) * 100, 0.3);
+                return (
+                  <div
+                    key={i}
+                    className={`absolute top-0 h-full ${SPEAKER_DOT_COLORS[colorIdx]} opacity-60 hover:opacity-100 transition-opacity`}
+                    style={{ left: `${left}%`, width: `${width}%` }}
+                    title={`${seg.name}: ${formatTime(seg.start)} - ${formatTime(seg.end)}`}
+                  />
+                );
+              })}
+              {/* Playhead */}
+              <div
+                className="absolute top-0 h-full w-0.5 bg-white z-10"
+                style={{ left: `${(currentTime / totalDuration) * 100}%` }}
+              />
+            </div>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              {allSpeakers.map((s) => {
+                const colorIdx = (speakerMap.get(s.id) || 0) % SPEAKER_DOT_COLORS.length;
+                return (
+                  <div key={s.id} className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <div className={`w-2 h-2 rounded-full ${SPEAKER_DOT_COLORS[colorIdx]}`} />
+                    <span>{s.name.split(" ")[0]}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Progress Slider */}
+        <div className="mb-4">
+          <Slider
+            value={[currentTime]}
+            onValueChange={seek}
+            min={0}
+            max={totalDuration || 1}
+            step={0.1}
+            className="w-full"
+          />
+          <div className="flex justify-between mt-1.5">
+            <span className="text-xs text-muted-foreground">{formatTime(currentTime)}</span>
+            <span className="text-xs text-muted-foreground">{formatTime(totalDuration)}</span>
+          </div>
+        </div>
+
+        {/* Controls */}
+        <div className="flex items-center justify-center gap-3">
+          <button onClick={() => skip(-15)} className="p-2 rounded-full bg-secondary text-muted-foreground hover:text-foreground transition-colors" title="Back 15s">
+            <SkipBack className="w-4 h-4" />
+          </button>
+          <button onClick={togglePlay} className="p-3 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+            {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
+          </button>
+          <button onClick={() => skip(30)} className="p-2 rounded-full bg-secondary text-muted-foreground hover:text-foreground transition-colors" title="Forward 30s">
+            <SkipForward className="w-4 h-4" />
+          </button>
+          <button onClick={cycleSpeed} className="px-2.5 py-1 rounded-full bg-secondary text-xs font-medium text-muted-foreground hover:text-foreground transition-colors" title="Playback speed">
+            {playbackRate}x
+          </button>
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="flex items-center justify-center gap-3">
-        <button
-          onClick={() => skip(-15)}
-          className="p-2 rounded-full bg-secondary text-muted-foreground hover:text-foreground transition-colors"
-          title="Back 15s"
-        >
-          <SkipBack className="w-4 h-4" />
-        </button>
+      {/* Transcript */}
+      {showTranscript && transcript && transcript.length > 0 && (
+        <div className="bg-card border border-border rounded-2xl p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Mic className="w-4 h-4 text-primary" />
+            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Transcript</h2>
+            <span className="text-xs text-muted-foreground ml-auto">{transcript.length} segments</span>
+          </div>
 
-        <button
-          onClick={togglePlay}
-          className="p-3 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-        >
-          {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
-        </button>
+          <div ref={transcriptContainerRef} className="space-y-3 max-h-96 overflow-y-auto pr-2 scroll-smooth">
+            {transcript.map((seg, i) => {
+              const colorIdx = (speakerMap.get(seg.speaker) || 0) % SPEAKER_COLORS.length;
+              const isCurrent = i === currentSegmentIndex;
+              const isPast = currentTime > seg.end;
+              const initials = seg.speakerName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
 
-        <button
-          onClick={() => skip(30)}
-          className="p-2 rounded-full bg-secondary text-muted-foreground hover:text-foreground transition-colors"
-          title="Forward 30s"
-        >
-          <SkipForward className="w-4 h-4" />
-        </button>
+              return (
+                <div
+                  key={i}
+                  onClick={() => seekToTime(seg.start)}
+                  className={`flex gap-3 p-3 rounded-xl cursor-pointer transition-all ${
+                    isCurrent
+                      ? "bg-primary/10 border border-primary/30 ring-1 ring-primary/20"
+                      : isPast
+                        ? "opacity-60 hover:opacity-100 hover:bg-secondary/50"
+                        : "hover:bg-secondary/50"
+                  }`}
+                >
+                  {/* Speaker avatar */}
+                  <div className="shrink-0 pt-0.5">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold border ${
+                      isCurrent
+                        ? SPEAKER_COLORS[colorIdx]
+                        : "bg-secondary text-muted-foreground border-border"
+                    }`}>
+                      {initials}
+                    </div>
+                  </div>
 
-        <button
-          onClick={cycleSpeed}
-          className="px-2.5 py-1 rounded-full bg-secondary text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-          title="Playback speed"
-        >
-          {playbackRate}x
-        </button>
-      </div>
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className={`text-xs font-semibold ${
+                        isCurrent ? "text-primary" : "text-muted-foreground"
+                      }`}>
+                        {seg.speakerName}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {formatTime(seg.start)}
+                      </span>
+                      {isCurrent && (
+                        <div className="flex items-end gap-px h-2.5 ml-1">
+                          {[1,2,3].map(j => (
+                            <div key={j} className="w-0.5 bg-primary rounded-full waveform-bar" style={{ height: "100%" }} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <p className={`text-sm leading-relaxed ${
+                      isCurrent ? "text-foreground" : "text-muted-foreground"
+                    }`}>
+                      {seg.text}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -426,7 +663,12 @@ export default function RoomDetail() {
             {/* Recording Player (past rooms) */}
             {!isLive && room.recordingUrl && (
               <div className="mb-6">
-                <RecordingPlayer url={room.recordingUrl} duration={room.recordingDuration} />
+                <RecordingPlayer
+                  url={room.recordingUrl}
+                  duration={room.recordingDuration}
+                  transcript={(() => { try { return JSON.parse(room.transcript || "[]"); } catch { return []; } })()}
+                  speakerTimeline={(() => { try { return JSON.parse(room.speakerTimeline || "[]"); } catch { return []; } })()}
+                />
               </div>
             )}
 
