@@ -480,15 +480,17 @@ export default function RoomDetail() {
       const lkMatch = livekitParticipants.find(
         (lk) => lk.identity === `user-${p.id}` || lk.name === p.userName
       );
+      // Check if this participant is the current user (match by name)
+      const isMe = isCurrentRoom && user && p.userName === user.name;
 
       if (p.role === "speaker" || p.role === "host") {
         speakerList.push({
           id: p.id,
           name: p.userName || "Unknown",
           avatar: p.userAvatar || null,
-          isMuted: lkMatch ? lkMatch.isMuted : (p.isMuted ?? true),
+          isMuted: isMe ? isMuted : (lkMatch ? lkMatch.isMuted : (p.isMuted ?? true)),
           isHost: p.role === "host",
-          isSpeaking: lkMatch ? lkMatch.isSpeaking : false,
+          isSpeaking: isMe ? !isMuted : (lkMatch ? lkMatch.isSpeaking : false),
           handRaised: false,
           audioLevel: lkMatch?.audioLevel || 0,
         });
@@ -497,13 +499,13 @@ export default function RoomDetail() {
           id: p.id,
           name: p.userName || "Unknown",
           avatar: p.userAvatar || null,
-          handRaised: p.handRaised ?? false,
+          handRaised: isMe ? handRaised : (p.handRaised ?? false),
         });
       }
     }
 
     return { speakers: speakerList, audience: audienceList };
-  }, [room?.participants, livekitParticipants]);
+  }, [room?.participants, livekitParticipants, isCurrentRoom, user, isMuted, handRaised]);
 
   const handleJoin = () => {
     if (!isAuthenticated) {
@@ -702,8 +704,8 @@ export default function RoomDetail() {
                       audioLevel={s.audioLevel}
                     />
                   ))}
-                  {/* Current user on stage */}
-                  {isCurrentRoom && isOnStage && user && (
+                  {/* Current user on stage (only if not already in DB list) */}
+                  {isCurrentRoom && isOnStage && user && !speakers.some(s => s.name === user.name) && (
                     <UserBubble
                       name={user.name || "You"}
                       avatar={user.avatarUrl}
@@ -729,8 +731,8 @@ export default function RoomDetail() {
                   {audience.map(a => (
                     <UserBubble key={a.id} name={a.name} avatar={a.avatar} handRaised={a.handRaised} />
                   ))}
-                  {/* Current user in audience */}
-                  {isCurrentRoom && !isOnStage && user && (
+                  {/* Current user in audience (only if not already in DB list) */}
+                  {isCurrentRoom && !isOnStage && user && !audience.some(a => a.name === user.name) && (
                     <UserBubble name={user.name || "You"} avatar={user.avatarUrl} handRaised={handRaised} />
                   )}
                 </div>
