@@ -507,15 +507,14 @@ export default function RoomDetail() {
     return { speakers: speakerList, audience: audienceList };
   }, [room?.participants, livekitParticipants, isCurrentRoom, user, isMuted, handRaised]);
 
-  const handleJoin = () => {
-    if (!isAuthenticated) {
-      router.push("/auth");
-      return;
-    }
-    if (room) {
+  // Auto-join the room when page loads
+  const hasAutoJoined = useRef(false);
+  useEffect(() => {
+    if (room && room.isLive && isAuthenticated && !isCurrentRoom && !hasAutoJoined.current) {
+      hasAutoJoined.current = true;
       joinRoom({ id: room.id, name: room.name, slug: room.slug });
     }
-  };
+  }, [room, isAuthenticated, isCurrentRoom, joinRoom]);
 
   const handleLeave = () => {
     leaveRoom();
@@ -754,18 +753,18 @@ export default function RoomDetail() {
               </div>
             )}
 
-            {/* Join/Leave Controls (live only) */}
+            {/* Controls (live only) */}
             {isLive && <div className="bg-card border border-border rounded-2xl p-4">
-              {!isCurrentRoom ? (
+              {!isAuthenticated ? (
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-muted-foreground">
-                    Join to listen and participate in this conversation
+                    Sign in to join the conversation
                   </div>
                   <Button
-                    onClick={handleJoin}
+                    onClick={() => router.push("/auth")}
                     className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
                   >
-                    <Headphones className="w-4 h-4" /> Join Room
+                    Sign In
                   </Button>
                 </div>
               ) : (
