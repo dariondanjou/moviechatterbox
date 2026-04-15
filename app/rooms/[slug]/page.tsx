@@ -1,46 +1,36 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/hooks/useAuth";
-import { useAudioRoom } from "@/contexts/AudioRoomContext";
+import { useAudioRoom, RoomParticipantInfo } from "@/contexts/AudioRoomContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { ConnectionState } from "livekit-client";
 import {
   Mic, MicOff, PhoneOff, Hand, Users, Radio, Film, User,
-  ChevronLeft, Crown, Volume2, VolumeX, Share2, Flag
+  ChevronLeft, Crown, Volume2, VolumeX, Share2, Flag, Wifi, WifiOff
 } from "lucide-react";
 
-// Simulated participant data for prototype
-const MOCK_SPEAKERS = [
-  { id: 1, name: "Alex Chen", avatar: null, isMuted: false, isHost: true },
-  { id: 2, name: "Maria Santos", avatar: null, isMuted: true, isHost: false },
-  { id: 3, name: "James Wright", avatar: null, isMuted: false, isHost: false },
-];
-
-const MOCK_AUDIENCE = [
-  { id: 4, name: "Taylor Kim", avatar: null, handRaised: true },
-  { id: 5, name: "Jordan Lee", avatar: null, handRaised: false },
-  { id: 6, name: "Sam Rivera", avatar: null, handRaised: false },
-  { id: 7, name: "Casey Morgan", avatar: null, handRaised: false },
-  { id: 8, name: "Drew Patel", avatar: null, handRaised: true },
-  { id: 9, name: "Quinn Adams", avatar: null, handRaised: false },
-];
-
-function UserBubble({ name, avatar, isMuted, isHost, handRaised, isSpeaking }: {
+function UserBubble({ name, avatar, isMuted, isHost, handRaised, isSpeaking, audioLevel }: {
   name: string; avatar?: string | null; isMuted?: boolean; isHost?: boolean;
-  handRaised?: boolean; isSpeaking?: boolean;
+  handRaised?: boolean; isSpeaking?: boolean; audioLevel?: number;
 }) {
   const initials = name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+  const ringScale = isSpeaking ? Math.min(1 + (audioLevel || 0) * 0.5, 1.15) : 1;
+
   return (
     <div className="flex flex-col items-center gap-1.5 w-16">
       <div className="relative">
-        <Avatar className={`w-14 h-14 ring-2 transition-all ${
-          isSpeaking ? "ring-primary ring-offset-2 ring-offset-background" : "ring-border"
-        }`}>
+        <Avatar
+          className={`w-14 h-14 ring-2 transition-all ${
+            isSpeaking ? "ring-primary ring-offset-2 ring-offset-background" : "ring-border"
+          }`}
+          style={{ transform: `scale(${ringScale})` }}
+        >
           <AvatarImage src={avatar || undefined} />
           <AvatarFallback className="bg-secondary text-sm font-bold text-foreground">{initials}</AvatarFallback>
         </Avatar>
@@ -81,12 +71,68 @@ export default function RoomDetail() {
   const slug = params.slug as string;
   const { isAuthenticated, user } = useAuth();
   const router = useRouter();
-  const { activeRoom, joinRoom, leaveRoom, isMuted, toggleMute, isOnStage, setIsOnStage, handRaised, raiseHand } = useAudioRoom();
-  const [isInRoom, setIsInRoom] = useState(false);
+  const {
+    activeRoom, joinRoom, leaveRoom,
+    isMuted, toggleMute,
+    isOnStage, setIsOnStage,
+    handRaised, raiseHand,
+    participants: livekitParticipants,
+    connectionState,
+  } = useAudioRoom();
 
-  const { data: room, isLoading } = trpc.room.detail.useQuery({ slug: slug! }, { enabled: !!slug });
+  const { data: room, isLoading, refetch } = trpc.room.detail.useQuery(
+    { slug: slug! },
+    { enabled: !!slug, refetchInterval: 5000 }
+  );
+
+  const updateRoleMutation = trpc.room.updateRole.useMutation({
+    onSuccess: () => refetch(),
+  });
 
   const isCurrentRoom = activeRoom?.slug === slug;
+
+  // Merge DB participants with LiveKit real-time state
+  const { speakers, audience } = useMemo(() => {
+    const dbParticipants = room?.participants || [];
+    const speakerList: Array<{
+      id: number; name: string; avatar: string | null;
+      isMuted: boolean; isHost: boolean; isSpeaking: boolean;
+      handRaised: boolean; audioLevel: number;
+    }> = [];
+    const audienceList: Array<{
+      id: number; name: string; avatar: string | null;
+      handRaised: boolean;
+    }> = [];
+
+    for (const p of dbParticipants) {
+      // Try to match with LiveKit participant for real-time audio state
+      const lkMatch = livekitParticipants.find(
+        (lk) => lk.identity === `user-${p.id}` || lk.name === p.userName
+      );
+
+      if (p.role === "speaker" || p.role === "host") {
+        speakerList.push({
+          id: p.id,
+          name: p.userName || "Unknown",
+          avatar: p.userAvatar || null,
+          isMuted: lkMatch ? lkMatch.isMuted : (p.isMuted ?? true),
+          isHost: p.role === "host",
+          isSpeaking: lkMatch ? lkMatch.isSpeaking : false,
+          handRaised: false,
+          audioLevel: lkMatch?.audioLevel || 0,
+        });
+      } else {
+        audienceList.push({
+          id: p.id,
+          name: p.userName || "Unknown",
+          avatar: p.userAvatar || null,
+          handRaised: p.handRaised ?? false,
+        });
+      }
+    }
+
+    return { speakers: speakerList, audience: audienceList };
+  }, [room?.participants, livekitParticipants]);
 
   const handleJoin = () => {
     if (!isAuthenticated) {
@@ -95,14 +141,24 @@ export default function RoomDetail() {
     }
     if (room) {
       joinRoom({ id: room.id, name: room.name, slug: room.slug });
-      setIsInRoom(true);
     }
   };
 
   const handleLeave = () => {
     leaveRoom();
-    setIsInRoom(false);
     router.push("/rooms");
+  };
+
+  const handleGoOnStage = () => {
+    if (!room) return;
+    setIsOnStage(true);
+    updateRoleMutation.mutate({ roomId: room.id, role: "speaker" });
+  };
+
+  const handleGoToAudience = () => {
+    if (!room) return;
+    setIsOnStage(false);
+    updateRoleMutation.mutate({ roomId: room.id, role: "listener" });
   };
 
   if (isLoading) {
@@ -129,6 +185,9 @@ export default function RoomDetail() {
     try { return JSON.parse(room.tags || "[]"); } catch { return []; }
   })();
 
+  const totalSpeakers = speakers.length + (isCurrentRoom && isOnStage ? 1 : 0);
+  const totalAudience = audience.length + (isCurrentRoom && !isOnStage ? 1 : 0);
+
   return (
     <div className="min-h-screen bg-background pb-32">
       {/* Back */}
@@ -140,6 +199,17 @@ export default function RoomDetail() {
             </Button>
           </Link>
           <div className="flex items-center gap-2">
+            {isCurrentRoom && (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground mr-2">
+                {connectionState === ConnectionState.Connected ? (
+                  <><Wifi className="w-3 h-3 text-green-500" /> Connected</>
+                ) : connectionState === ConnectionState.Connecting ? (
+                  <><Wifi className="w-3 h-3 text-yellow-500 animate-pulse" /> Connecting...</>
+                ) : (
+                  <><WifiOff className="w-3 h-3 text-muted-foreground" /> Audio off</>
+                )}
+              </span>
+            )}
             <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
             <span className="text-xs font-bold text-primary uppercase tracking-wider">Live</span>
           </div>
@@ -186,35 +256,40 @@ export default function RoomDetail() {
               {/* Stats */}
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
-                  <Mic className="w-3.5 h-3.5" /> {MOCK_SPEAKERS.length} speaking
+                  <Mic className="w-3.5 h-3.5" /> {totalSpeakers} speaking
                 </span>
                 <span className="flex items-center gap-1">
-                  <Users className="w-3.5 h-3.5" /> {MOCK_AUDIENCE.length + (room.listenerCount || 0)} listening
+                  <Users className="w-3.5 h-3.5" /> {totalAudience + (room.listenerCount || 0)} listening
                 </span>
               </div>
             </div>
 
-            {/* Stage — Speakers */}
+            {/* Stage -- Speakers */}
             <div className="bg-card border border-border rounded-2xl p-6 mb-4">
               <div className="flex items-center gap-2 mb-5">
                 <Mic className="w-4 h-4 text-primary" />
                 <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">On Stage</h2>
               </div>
               <div className="flex flex-wrap gap-4">
-                {MOCK_SPEAKERS.map((s, i) => (
+                {speakers.length === 0 && !isCurrentRoom && (
+                  <p className="text-sm text-muted-foreground">No speakers yet — join and go on stage!</p>
+                )}
+                {speakers.map((s) => (
                   <UserBubble
                     key={s.id}
                     name={s.name}
                     avatar={s.avatar}
                     isMuted={s.isMuted}
                     isHost={s.isHost}
-                    isSpeaking={!s.isMuted && i % 2 === 0}
+                    isSpeaking={s.isSpeaking}
+                    audioLevel={s.audioLevel}
                   />
                 ))}
                 {/* Current user on stage */}
                 {isCurrentRoom && isOnStage && user && (
                   <UserBubble
                     name={user.name || "You"}
+                    avatar={user.avatarUrl}
                     isMuted={isMuted}
                     isSpeaking={!isMuted}
                   />
@@ -222,19 +297,22 @@ export default function RoomDetail() {
               </div>
             </div>
 
-            {/* Audience — Listeners */}
+            {/* Audience -- Listeners */}
             <div className="bg-card border border-border rounded-2xl p-6 mb-6">
               <div className="flex items-center gap-2 mb-5">
                 <Users className="w-4 h-4 text-muted-foreground" />
                 <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Audience</h2>
               </div>
               <div className="flex flex-wrap gap-4">
-                {MOCK_AUDIENCE.map(a => (
+                {audience.length === 0 && !isCurrentRoom && (
+                  <p className="text-sm text-muted-foreground">No listeners yet — be the first to join!</p>
+                )}
+                {audience.map(a => (
                   <UserBubble key={a.id} name={a.name} avatar={a.avatar} handRaised={a.handRaised} />
                 ))}
                 {/* Current user in audience */}
                 {isCurrentRoom && !isOnStage && user && (
-                  <UserBubble name={user.name || "You"} handRaised={handRaised} />
+                  <UserBubble name={user.name || "You"} avatar={user.avatarUrl} handRaised={handRaised} />
                 )}
               </div>
             </div>
@@ -282,7 +360,7 @@ export default function RoomDetail() {
 
                     {/* Move to stage / audience */}
                     <Button
-                      onClick={() => setIsOnStage(!isOnStage)}
+                      onClick={isOnStage ? handleGoToAudience : handleGoOnStage}
                       variant="outline"
                       className="gap-2 border-border text-muted-foreground hover:text-foreground"
                     >
@@ -302,7 +380,7 @@ export default function RoomDetail() {
             </div>
           </div>
 
-          {/* Sidebar — Related Content */}
+          {/* Sidebar -- Related Content */}
           <div className="space-y-4">
             {/* Related Movie */}
             {(room as any).relatedMovie && (
@@ -390,8 +468,21 @@ export default function RoomDetail() {
                   <span className="text-foreground">{new Date(room.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
                 </div>
                 <div className="flex justify-between">
+                  <span className="text-muted-foreground">Participants</span>
+                  <span className="text-foreground">{(room.participants || []).length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Audio</span>
+                  <span className={connectionState === ConnectionState.Connected ? "text-green-500 font-medium" : "text-muted-foreground"}>
+                    {isCurrentRoom
+                      ? connectionState === ConnectionState.Connected ? "Connected" : connectionState === ConnectionState.Connecting ? "Connecting..." : "Not connected"
+                      : "Join to connect"
+                    }
+                  </span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-muted-foreground">Status</span>
-                  <span className="text-primary font-medium">🔴 Live</span>
+                  <span className="text-primary font-medium">Live</span>
                 </div>
               </div>
             </div>
@@ -402,7 +493,6 @@ export default function RoomDetail() {
   );
 }
 
-// Fix missing import
 function Headphones({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

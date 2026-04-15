@@ -571,6 +571,67 @@ const roomRouter = router({
         .where(and(eq(roomParticipants.roomId, input.roomId), eq(roomParticipants.userId, ctx.userId)));
       return { success: true };
     }),
+
+  promoteToSpeaker: protectedProcedure
+    .input(z.object({ roomId: z.number(), targetUserId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      // Only the host can promote
+      const [room] = await db.select().from(audioRooms).where(eq(audioRooms.id, input.roomId)).limit(1);
+      if (!room || room.hostUserId !== ctx.userId) {
+        throw new Error("Only the host can promote speakers");
+      }
+      await db.update(roomParticipants)
+        .set({ role: "speaker", handRaised: false })
+        .where(and(eq(roomParticipants.roomId, input.roomId), eq(roomParticipants.userId, input.targetUserId), isNull(roomParticipants.leftAt)));
+      await db.update(audioRooms).set({ speakerCount: sql`${audioRooms.speakerCount} + 1` }).where(eq(audioRooms.id, input.roomId));
+      return { success: true };
+    }),
+
+  demoteToListener: protectedProcedure
+    .input(z.object({ roomId: z.number(), targetUserId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const [room] = await db.select().from(audioRooms).where(eq(audioRooms.id, input.roomId)).limit(1);
+      if (!room || room.hostUserId !== ctx.userId) {
+        throw new Error("Only the host can demote speakers");
+      }
+      await db.update(roomParticipants)
+        .set({ role: "listener" })
+        .where(and(eq(roomParticipants.roomId, input.roomId), eq(roomParticipants.userId, input.targetUserId), isNull(roomParticipants.leftAt)));
+      await db.update(audioRooms).set({ speakerCount: sql`GREATEST(0, ${audioRooms.speakerCount} - 1)` }).where(eq(audioRooms.id, input.roomId));
+      return { success: true };
+    }),
+
+  endRoom: protectedProcedure
+    .input(z.object({ roomId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const [room] = await db.select().from(audioRooms).where(eq(audioRooms.id, input.roomId)).limit(1);
+      if (!room || room.hostUserId !== ctx.userId) {
+        throw new Error("Only the host can end the room");
+      }
+      // Mark all participants as left
+      await db.update(roomParticipants)
+        .set({ leftAt: new Date() })
+        .where(and(eq(roomParticipants.roomId, input.roomId), isNull(roomParticipants.leftAt)));
+      // End the room
+      await db.update(audioRooms)
+        .set({ isLive: false, endedAt: new Date(), listenerCount: 0, speakerCount: 0 })
+        .where(eq(audioRooms.id, input.roomId));
+      return { success: true };
+    }),
+
+  updateRole: protectedProcedure
+    .input(z.object({ roomId: z.number(), role: z.enum(["speaker", "listener"]) }))
+    .mutation(async ({ input, ctx }) => {
+      await db.update(roomParticipants)
+        .set({ role: input.role })
+        .where(and(eq(roomParticipants.roomId, input.roomId), eq(roomParticipants.userId, ctx.userId), isNull(roomParticipants.leftAt)));
+      if (input.role === "speaker") {
+        await db.update(audioRooms).set({ speakerCount: sql`${audioRooms.speakerCount} + 1` }).where(eq(audioRooms.id, input.roomId));
+      } else {
+        await db.update(audioRooms).set({ speakerCount: sql`GREATEST(0, ${audioRooms.speakerCount} - 1)` }).where(eq(audioRooms.id, input.roomId));
+      }
+      return { success: true };
+    }),
 });
 
 // ─── User Router ──────────────────────────────────────────────────────────────

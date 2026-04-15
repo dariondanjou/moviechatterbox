@@ -1,16 +1,23 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { Mic, MicOff, PhoneOff, Users, Hand, ChevronUp, ChevronDown, Volume2, Radio } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Users, Hand, ChevronUp, ChevronDown, Volume2, Radio, Wifi, WifiOff } from "lucide-react";
 import { useAudioRoom } from "@/contexts/AudioRoomContext";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { ConnectionState } from "livekit-client";
 
 export default function FloatingAudioPlayer() {
-  const { activeRoom, leaveRoom, isMuted, toggleMute, isOnStage, raiseHand, handRaised, volume, setVolume } = useAudioRoom();
+  const {
+    activeRoom, leaveRoom, isMuted, toggleMute,
+    isOnStage, raiseHand, handRaised,
+    volume, setVolume, participants, connectionState,
+  } = useAudioRoom();
   const [expanded, setExpanded] = useState(false);
 
   if (!activeRoom) return null;
+
+  const activeSpeakers = participants.filter(p => p.isSpeaking);
 
   return (
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100vw-2rem)] max-w-lg">
@@ -21,10 +28,22 @@ export default function FloatingAudioPlayer() {
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Now in Room</span>
               <Link href={`/rooms/${activeRoom.slug}`} className="text-xs text-primary hover:underline">
-                View Room →
+                View Room
               </Link>
             </div>
             <div className="text-sm font-semibold text-foreground mb-3 line-clamp-1">{activeRoom.name}</div>
+
+            {/* Connection status */}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
+              {connectionState === ConnectionState.Connected ? (
+                <><Wifi className="w-3 h-3 text-green-500" /><span className="text-green-500">Audio connected</span></>
+              ) : connectionState === ConnectionState.Connecting ? (
+                <><Wifi className="w-3 h-3 text-yellow-500 animate-pulse" /><span className="text-yellow-500">Connecting...</span></>
+              ) : (
+                <><WifiOff className="w-3 h-3" /><span>Audio not available</span></>
+              )}
+              <span className="ml-auto">{participants.length} in room</span>
+            </div>
 
             {/* Volume */}
             <div className="flex items-center gap-3 mb-3">
@@ -62,12 +81,24 @@ export default function FloatingAudioPlayer() {
             </div>
           </div>
 
-          {/* Waveform (when unmuted on stage) */}
+          {/* Real audio level waveform (when unmuted on stage) */}
           {isOnStage && !isMuted && (
             <div className="flex items-end gap-0.5 h-6 shrink-0">
               {[1,2,3,4,5].map(i => (
                 <div key={i} className="w-1 bg-primary rounded-full waveform-bar" style={{ height: "100%" }} />
               ))}
+            </div>
+          )}
+
+          {/* Active speakers indicator */}
+          {activeSpeakers.length > 0 && !(isOnStage && !isMuted) && (
+            <div className="flex items-center gap-1 shrink-0">
+              <div className="flex items-end gap-0.5 h-4">
+                {[1,2,3].map(i => (
+                  <div key={i} className="w-0.5 bg-green-500 rounded-full waveform-bar" style={{ height: "100%" }} />
+                ))}
+              </div>
+              <span className="text-xs text-green-500">{activeSpeakers.length}</span>
             </div>
           )}
 
