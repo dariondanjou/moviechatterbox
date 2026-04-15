@@ -138,29 +138,48 @@ export function AudioRoomProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    try {
-      // Get token from our API
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch("/api/livekit/token", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
-        body: JSON.stringify({
-          roomSlug,
-          userName: user?.name || "Anonymous",
-        }),
-      });
-
-      if (!res.ok) {
+    // Helper to fetch token, with retry for auth timing
+    const fetchToken = async (retries = 3): Promise<string | null> => {
+      for (let attempt = 0; attempt < retries; attempt++) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token && attempt < retries - 1) {
+          // Auth not ready yet, wait and retry
+          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          continue;
+        }
+        const res = await fetch("/api/livekit/token", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          },
+          body: JSON.stringify({
+            roomSlug,
+            userName: user?.name || "Anonymous",
+          }),
+        });
+        if (res.ok) {
+          const { token } = await res.json();
+          return token;
+        }
+        if (res.status === 401 && attempt < retries - 1) {
+          // Auth token might not be ready, retry
+          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          continue;
+        }
         const err = await res.json();
         console.error("Failed to get LiveKit token:", err);
-        toast.error("Could not connect to audio — running in listen-only mode");
+        return null;
+      }
+      return null;
+    };
+
+    try {
+      const token = await fetchToken();
+      if (!token) {
+        toast.error("Could not connect to audio — try refreshing");
         return;
       }
-
-      const { token } = await res.json();
 
       // Create and connect room
       const room = new Room({
