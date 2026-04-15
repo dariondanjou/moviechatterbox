@@ -14,7 +14,7 @@ import { ConnectionState } from "livekit-client";
 import {
   Mic, MicOff, PhoneOff, Hand, Users, Radio, Film, User,
   ChevronLeft, Crown, Volume2, VolumeX, Share2, Flag, Wifi, WifiOff,
-  Play, Pause, Clock, SkipBack, SkipForward
+  Play, Pause, Clock, SkipBack, SkipForward, XCircle, ShieldCheck
 } from "lucide-react";
 
 function formatTime(seconds: number): string {
@@ -459,14 +459,30 @@ export default function RoomDetail() {
   const updateRoleMutation = trpc.room.updateRole.useMutation({
     onSuccess: () => refetch(),
   });
+  const endRoomMutation = trpc.room.endRoom.useMutation({
+    onSuccess: () => {
+      leaveRoom();
+      toast.success("Room closed");
+      router.push("/rooms");
+    },
+    onError: () => toast.error("Failed to close room"),
+  });
+  const makeHostMutation = trpc.room.makeHost.useMutation({
+    onSuccess: () => {
+      refetch();
+      toast.success("Host transferred");
+    },
+    onError: () => toast.error("Failed to transfer host"),
+  });
 
   const isCurrentRoom = activeRoom?.slug === slug;
+  const isRoomHost = !!(room && user && (room as any).hostSubId === user.id);
 
   // Merge DB participants with LiveKit real-time state
   const { speakers, audience } = useMemo(() => {
     const dbParticipants = room?.participants || [];
     const speakerList: Array<{
-      id: number; name: string; avatar: string | null;
+      id: number; odUserId: number; name: string; avatar: string | null;
       isMuted: boolean; isHost: boolean; isSpeaking: boolean;
       handRaised: boolean; audioLevel: number;
     }> = [];
@@ -491,6 +507,7 @@ export default function RoomDetail() {
       if (effectiveRole === "speaker" || effectiveRole === "host") {
         speakerList.push({
           id: p.id,
+          odUserId: (p as any).odUserId,
           name: p.userName || "Unknown",
           avatar: p.userAvatar || null,
           isMuted: isMe ? isMuted : (lkMatch ? lkMatch.isMuted : (p.isMuted ?? true)),
@@ -718,15 +735,30 @@ export default function RoomDetail() {
                     <p className="text-sm text-muted-foreground">No speakers yet — join and go on stage!</p>
                   )}
                   {speakers.map((s) => (
-                    <UserBubble
-                      key={s.id}
-                      name={s.name}
-                      avatar={s.avatar}
-                      isMuted={s.isMuted}
-                      isHost={s.isHost}
-                      isSpeaking={s.isSpeaking}
-                      audioLevel={s.audioLevel}
-                    />
+                    <div key={s.id} className="relative group">
+                      <UserBubble
+                        name={s.name}
+                        avatar={s.avatar}
+                        isMuted={s.isMuted}
+                        isHost={s.isHost}
+                        isSpeaking={s.isSpeaking}
+                        audioLevel={s.audioLevel}
+                      />
+                      {/* Make Host button — only visible to room creator, on other speakers */}
+                      {isRoomHost && !s.isHost && user && s.name !== user.name && (
+                        <button
+                          onClick={() => {
+                            if (confirm(`Make ${s.name} a host of this room?`)) {
+                              makeHostMutation.mutate({ roomId: room!.id, targetUserId: s.odUserId });
+                            }
+                          }}
+                          className="absolute -bottom-5 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[10px] text-primary hover:underline whitespace-nowrap"
+                          title="Make host"
+                        >
+                          <ShieldCheck className="w-3 h-3 inline mr-0.5" />Host
+                        </button>
+                      )}
+                    </div>
                   ))}
                   {/* Current user on stage (only if not already in DB list) */}
                   {isCurrentRoom && isOnStage && user && !speakers.some(s => s.name === user.name) && (
@@ -829,13 +861,30 @@ export default function RoomDetail() {
                     </Button>
                   </div>
 
-                  <Button
-                    onClick={handleLeave}
-                    variant="outline"
-                    className="gap-2 border-destructive text-destructive hover:bg-destructive/10"
-                  >
-                    <PhoneOff className="w-4 h-4" /> Leave Quietly
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      onClick={handleLeave}
+                      variant="outline"
+                      className="gap-2 border-destructive text-destructive hover:bg-destructive/10"
+                    >
+                      <PhoneOff className="w-4 h-4" /> Leave Quietly
+                    </Button>
+
+                    {/* Close Room — only for host */}
+                    {isRoomHost && (
+                      <Button
+                        onClick={() => {
+                          if (confirm("Close this room for everyone? This ends the conversation.")) {
+                            endRoomMutation.mutate({ roomId: room!.id });
+                          }
+                        }}
+                        variant="outline"
+                        className="gap-2 border-destructive bg-destructive/10 text-destructive hover:bg-destructive/20"
+                      >
+                        <XCircle className="w-4 h-4" /> Close Room
+                      </Button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>}

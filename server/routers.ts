@@ -489,6 +489,15 @@ const roomRouter = router({
       const [room] = await db.select().from(audioRooms).where(eq(audioRooms.slug, input.slug)).limit(1);
       if (!room) return null;
 
+      // Get host info
+      const [hostUser] = await db.select({
+        name: users.name,
+        supabaseId: users.supabaseId,
+        avatarUrl: users.avatarUrl,
+      }).from(users).where(eq(users.id, room.hostUserId)).limit(1);
+      const hostName = hostUser?.name || "Unknown";
+      const hostSubId = hostUser?.supabaseId || null;
+
       // Related movie
       let relatedMovie = null;
       if (room.relatedMovieId) {
@@ -537,7 +546,7 @@ const roomRouter = router({
         .from(roomParticipants)
         .where(and(eq(roomParticipants.roomId, room.id), isNull(roomParticipants.leftAt)));
 
-      return { ...room, relatedMovie, relatedPerson, links, participants };
+      return { ...room, hostName, hostSubId, relatedMovie, relatedPerson, links, participants };
     }),
 
   create: protectedProcedure
@@ -581,8 +590,20 @@ const roomRouter = router({
     .mutation(async ({ input, ctx }) => {
       await db.update(roomParticipants)
         .set({ leftAt: new Date() })
-        .where(and(eq(roomParticipants.roomId, input.roomId), eq(roomParticipants.userId, ctx.userId)));
+        .where(and(eq(roomParticipants.roomId, input.roomId), eq(roomParticipants.userId, ctx.userId), isNull(roomParticipants.leftAt)));
       await db.update(audioRooms).set({ listenerCount: sql`GREATEST(0, ${audioRooms.listenerCount} - 1)` }).where(eq(audioRooms.id, input.roomId));
+
+      // Auto-close room if no one is left
+      const remaining = await db.select({ id: roomParticipants.id })
+        .from(roomParticipants)
+        .where(and(eq(roomParticipants.roomId, input.roomId), isNull(roomParticipants.leftAt)))
+        .limit(1);
+      if (remaining.length === 0) {
+        await db.update(audioRooms)
+          .set({ isLive: false, endedAt: new Date(), listenerCount: 0, speakerCount: 0 })
+          .where(eq(audioRooms.id, input.roomId));
+      }
+
       return { success: true };
     }),
 
@@ -653,6 +674,24 @@ const roomRouter = router({
       } else {
         await db.update(audioRooms).set({ speakerCount: sql`GREATEST(0, ${audioRooms.speakerCount} - 1)` }).where(eq(audioRooms.id, input.roomId));
       }
+      return { success: true };
+    }),
+
+  makeHost: protectedProcedure
+    .input(z.object({ roomId: z.number(), targetUserId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const [room] = await db.select().from(audioRooms).where(eq(audioRooms.id, input.roomId)).limit(1);
+      if (!room || room.hostUserId !== ctx.userId) {
+        throw new Error("Only the current host can transfer host status");
+      }
+      // Transfer host to target user
+      await db.update(audioRooms)
+        .set({ hostUserId: input.targetUserId })
+        .where(eq(audioRooms.id, input.roomId));
+      // Ensure target is a speaker
+      await db.update(roomParticipants)
+        .set({ role: "speaker", handRaised: false })
+        .where(and(eq(roomParticipants.roomId, input.roomId), eq(roomParticipants.userId, input.targetUserId), isNull(roomParticipants.leftAt)));
       return { success: true };
     }),
 });

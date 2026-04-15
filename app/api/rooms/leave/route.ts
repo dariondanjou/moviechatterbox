@@ -24,6 +24,17 @@ export async function POST(req: NextRequest) {
       .set({ listenerCount: sql`GREATEST(0, ${audioRooms.listenerCount} - 1)` })
       .where(eq(audioRooms.id, roomId));
 
+    // Auto-close room if no one is left
+    const remaining = await db.select({ id: roomParticipants.id })
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.roomId, roomId), isNull(roomParticipants.leftAt)))
+      .limit(1);
+    if (remaining.length === 0) {
+      await db.update(audioRooms)
+        .set({ isLive: false, endedAt: new Date(), listenerCount: 0, speakerCount: 0 })
+        .where(eq(audioRooms.id, roomId));
+    }
+
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: "Failed" }, { status: 500 });
