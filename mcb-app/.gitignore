@@ -44,3 +44,6 @@ example
 
 # local env (contains Supabase keys)
 .env
+
+# runtime assets must be tracked (root .gitignore excludes *.png)
+!assets/**/*.png
