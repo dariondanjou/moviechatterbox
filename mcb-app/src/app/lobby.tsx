@@ -110,8 +110,8 @@ export default function Lobby() {
           <Pressable onPress={() => router.push('/browse')}>
             <Text style={styles.headerLink}>browse</Text>
           </Pressable>
-          <Pressable onPress={() => supabase.auth.signOut()}>
-            <Text style={styles.signOut}>sign out</Text>
+          <Pressable onPress={() => router.push('/profile')}>
+            <Text style={styles.headerLink}>profile</Text>
           </Pressable>
         </View>
       </View>

@@ -26,7 +26,9 @@ The v1.4 rebuild of [moviechatterbox.com](https://moviechatterbox.com): a single
 - ✅ Browse: responsive poster grid + debounced search
 - ✅ Title entity page: poster/meta/overview, attached live+scheduled Chatterboxes, TMDB attribution (FR-2.2.1 terms)
 - ✅ Entity-attached Chatterboxes (FR-2.1.1): start from a film page, film chip on Lobby cards and in the room linking back to the film page (FR-2.4.6 spirit)
-- ⏳ Remaining in step 3: person/episode entities, entity text threads (FR-2.2.2), profiles/lists layer
+- ✅ Entity text threads on title pages (FR-2.2.2)
+- ✅ Letterboxd layer: half-star ratings (0.5–5) with MCB community average, watchlist as a per-user system list (`mcb_lists`/`mcb_list_items`), profile page (identity edit, stats, watchlist grid, recent ratings)
+- ⏳ Remaining in step 3: person/episode entities, reviews/diary, custom lists UI
 
 Smoke-test login: `mcb-smoketest@example.com` / `mcb-smoke-Passw0rd!`
 

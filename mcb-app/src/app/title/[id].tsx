@@ -11,8 +11,16 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { GlassCard, LiveBadge, PrimaryPill, TimeChip } from '@/components/ui';
+import { RatingStars } from '@/components/rating-stars';
+import { GhostPill, GlassCard, LiveBadge, PrimaryPill, TimeChip } from '@/components/ui';
 import type { Chatterbox } from '@/lib/chatterbox';
+import {
+  getMyRating,
+  isWatchlisted,
+  ratingSummary,
+  setMyRating,
+  toggleWatchlist,
+} from '@/lib/library';
 import {
   getTitle,
   listBoxesForEntity,
@@ -30,6 +38,12 @@ export default function TitlePage() {
   const [boxes, setBoxes] = useState<Chatterbox[]>([]);
   const [posts, setPosts] = useState<ThreadPost[]>([]);
   const [draft, setDraft] = useState('');
+  const [myRating, setMyRatingState] = useState<number | null>(null);
+  const [community, setCommunity] = useState<{ average: number | null; count: number }>({
+    average: null,
+    count: 0,
+  });
+  const [inWatchlist, setInWatchlist] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -39,10 +53,33 @@ export default function TitlePage() {
         if (t) {
           listBoxesForEntity(t.media_type, t.id).then(setBoxes).catch(() => {});
           listThreadPosts(t.media_type, t.id).then(setPosts).catch(() => {});
+          getMyRating(t.media_type, t.id).then(setMyRatingState).catch(() => {});
+          ratingSummary(t.media_type, t.id).then(setCommunity).catch(() => {});
+          isWatchlisted(t.media_type, t.id).then(setInWatchlist).catch(() => {});
         }
       })
       .catch(() => {});
   }, [id]);
+
+  async function onRate(rating: number | null) {
+    if (!title) return;
+    setMyRatingState(rating);
+    try {
+      await setMyRating(title.media_type, title.id, rating);
+      setCommunity(await ratingSummary(title.media_type, title.id));
+    } catch {
+      getMyRating(title.media_type, title.id).then(setMyRatingState).catch(() => {});
+    }
+  }
+
+  async function onToggleWatchlist() {
+    if (!title) return;
+    const next = !inWatchlist;
+    setInWatchlist(next);
+    await toggleWatchlist(title.media_type, title.id, next).catch(() =>
+      setInWatchlist(!next),
+    );
+  }
 
   async function submitPost() {
     if (!title) return;
@@ -106,7 +143,26 @@ export default function TitlePage() {
           </View>
         </View>
 
-        <PrimaryPill label="🎙 Start a Chatterbox" onPress={startChatterbox} />
+        <View style={styles.ctaRow}>
+          <View style={styles.ctaGrow}>
+            <PrimaryPill label="🎙 Start a Chatterbox" onPress={startChatterbox} />
+          </View>
+          <GhostPill
+            label={inWatchlist ? '✓ Watchlist' : '+ Watchlist'}
+            active={inWatchlist}
+            onPress={onToggleWatchlist}
+          />
+        </View>
+
+        <View style={styles.ratingBlock}>
+          <Text style={styles.sectionLabel}>YOUR RATING</Text>
+          <RatingStars value={myRating} onRate={onRate} />
+          <Text style={styles.communityText}>
+            {community.count > 0
+              ? `MCB average ★ ${community.average?.toFixed(1)} · ${community.count} rating${community.count === 1 ? '' : 's'}`
+              : 'No MCB ratings yet'}
+          </Text>
+        </View>
 
         {title.overview ? (
           <Text style={styles.overview}>{title.overview}</Text>
@@ -250,6 +306,21 @@ const styles = StyleSheet.create({
   boxTitle: {
     ...type.heading,
     color: color.textPrimary,
+  },
+  ctaRow: {
+    flexDirection: 'row',
+    gap: space.sm,
+    alignItems: 'center',
+  },
+  ctaGrow: {
+    flex: 1,
+  },
+  ratingBlock: {
+    gap: space.sm,
+  },
+  communityText: {
+    ...type.label,
+    color: color.textTertiary,
   },
   composerRow: {
     flexDirection: 'row',
