@@ -15,6 +15,7 @@ export type Chatterbox = {
   scheduled_at: string | null;
   started_at: string | null;
   ended_at: string | null;
+  is_recorded: boolean;
   created_at: string;
 };
 
@@ -213,6 +214,50 @@ export async function sendMessage(boxId: string, body: string) {
     .from('mcb_messages')
     .insert({ box_id: boxId, user_id: user.id, body });
   if (error) throw error;
+}
+
+/**
+ * Toggle recording disclosure (FR-2.1.4, FR-5.4). Host-only via RLS.
+ * Actual media egress lands once storage credentials are configured;
+ * the in-room REC disclosure is honest from day one.
+ */
+export async function setRecording(boxId: string, on: boolean) {
+  const { error } = await supabase
+    .from('mcb_chatterboxes')
+    .update({ is_recorded: on })
+    .eq('id', boxId);
+  if (error) throw error;
+}
+
+export async function toggleReminder(boxId: string, on: boolean) {
+  const user = (await supabase.auth.getUser()).data.user;
+  if (!user) throw new Error('not signed in');
+  if (on) {
+    const { error } = await supabase
+      .from('mcb_reminders')
+      .upsert({ box_id: boxId, user_id: user.id });
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from('mcb_reminders')
+      .delete()
+      .eq('box_id', boxId)
+      .eq('user_id', user.id);
+    if (error) throw error;
+  }
+}
+
+/** Which of the given boxes the current user has reminders for. */
+export async function myReminders(boxIds: string[]): Promise<Set<string>> {
+  const user = (await supabase.auth.getUser()).data.user;
+  if (!user || boxIds.length === 0) return new Set();
+  const { data, error } = await supabase
+    .from('mcb_reminders')
+    .select('box_id')
+    .eq('user_id', user.id)
+    .in('box_id', boxIds);
+  if (error) throw error;
+  return new Set(data.map((r) => r.box_id));
 }
 
 /** Fetch a LiveKit access token for this box from the edge function. */

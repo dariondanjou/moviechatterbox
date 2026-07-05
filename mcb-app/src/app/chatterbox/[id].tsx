@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Avatar, GhostPill, LiveBadge } from '@/components/ui';
+import { Avatar, GhostPill, LiveBadge, PrimaryPill } from '@/components/ui';
 import {
   createAudioSession,
   type AudioSession,
@@ -21,6 +21,7 @@ import {
   endChatterbox,
   fetchAudioToken,
   getBox,
+  goLive,
   join,
   leave,
   listMessages,
@@ -28,6 +29,7 @@ import {
   sendMessage,
   setHandRaised,
   setMuted,
+  setRecording,
   setRole,
   type Chatterbox,
   type Message,
@@ -105,19 +107,24 @@ export default function ChatterboxScreen() {
     }
   }, [id]);
 
-  // Join + initial load + audio
+  // Load the box
   useEffect(() => {
-    if (!id || !myId) return;
+    if (!id) return;
+    getBox(id)
+      .then(setBox)
+      .catch(() => setBox(null));
+  }, [id]);
+
+  const isLive = box?.status === 'live';
+  const hostId = box?.host_id;
+
+  // Join + data + audio while live (also covers a scheduled box going live)
+  useEffect(() => {
+    if (!id || !myId || !isLive) return;
     let cancelled = false;
 
     (async () => {
-      const b = await getBox(id).catch(() => null);
-      if (cancelled) return;
-      setBox(b);
-      if (!b || b.status !== 'live') return;
-
-      const hostJoin = b.host_id === myId;
-      await join(id, hostJoin ? 'host' : 'listener').catch(() => {});
+      await join(id, hostId === myId ? 'host' : 'listener').catch(() => {});
       await Promise.all([
         refreshParticipants(),
         listMessages(id).then((m) => !cancelled && setMessages(m)),
@@ -129,9 +136,9 @@ export default function ChatterboxScreen() {
       cancelled = true;
       audioRef.current?.disconnect().catch(() => {});
       audioRef.current = null;
-      if (id) leave(id).catch(() => {});
+      leave(id).catch(() => {});
     };
-  }, [id, myId, connectAudio, refreshParticipants]);
+  }, [id, myId, isLive, hostId, connectAudio, refreshParticipants]);
 
   // Realtime: participants, messages, box status, reactions
   useEffect(() => {
@@ -258,6 +265,13 @@ export default function ChatterboxScreen() {
   }
 
   if (box.status !== 'live') {
+    const scheduledFor = box.scheduled_at
+      ? new Date(box.scheduled_at).toLocaleString([], {
+          weekday: 'short',
+          hour: 'numeric',
+          minute: '2-digit',
+        })
+      : null;
     return (
       <SafeAreaView style={styles.screen}>
         <View style={styles.endedWrap}>
@@ -265,6 +279,18 @@ export default function ChatterboxScreen() {
             {box.status === 'ended' ? 'This Chatterbox has ended' : 'Not live yet'}
           </Text>
           <Text style={styles.meta}>{box.title}</Text>
+          {box.status === 'scheduled' && scheduledFor && (
+            <Text style={styles.meta}>Scheduled for {scheduledFor}</Text>
+          )}
+          {box.status === 'scheduled' && isHost && (
+            <PrimaryPill
+              label="🎙 Go live now"
+              onPress={async () => {
+                await goLive(box.id).catch(() => {});
+                setBox({ ...box, status: 'live', started_at: new Date().toISOString() });
+              }}
+            />
+          )}
           <GhostPill label="Back to the Lobby" onPress={backToLobby} />
         </View>
       </SafeAreaView>
@@ -281,12 +307,31 @@ export default function ChatterboxScreen() {
         <View style={styles.header}>
           <View style={styles.headerBadges}>
             <LiveBadge />
+            {box.is_recorded && (
+              <View style={styles.recBadge}>
+                <Text style={styles.recBadgeText}>● REC</Text>
+              </View>
+            )}
             <Text style={styles.listenerCount}>
               {participants.length} here
             </Text>
+            {isHost && (
+              <Pressable
+                onPress={() => setRecording(box.id, !box.is_recorded).catch(() => {})}
+              >
+                <Text style={styles.recToggle}>
+                  {box.is_recorded ? 'stop rec' : 'record'}
+                </Text>
+              </Pressable>
+            )}
           </View>
           <Text style={styles.roomTitle}>{box.title}</Text>
           {box.topic ? <Text style={styles.meta}>{box.topic}</Text> : null}
+          {box.is_recorded && (
+            <Text style={styles.recDisclosure}>
+              This Chatterbox is being recorded.
+            </Text>
+          )}
         </View>
 
         {audioState === 'error' && (
@@ -442,6 +487,27 @@ const styles = StyleSheet.create({
   listenerCount: {
     ...type.micro,
     color: color.textTertiary,
+  },
+  recBadge: {
+    backgroundColor: 'rgba(229,72,77,0.14)',
+    borderColor: 'rgba(229,72,77,0.4)',
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.sm,
+    paddingVertical: 2,
+  },
+  recBadgeText: {
+    ...type.micro,
+    color: color.recordingText,
+  },
+  recToggle: {
+    ...type.micro,
+    color: color.textTertiary,
+    textDecorationLine: 'underline',
+  },
+  recDisclosure: {
+    ...type.label,
+    color: color.recordingText,
   },
   roomTitle: {
     fontFamily: font.bold,

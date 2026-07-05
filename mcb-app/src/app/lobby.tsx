@@ -10,10 +10,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { GlassCard, LiveBadge, TimeChip } from '@/components/ui';
+import { GhostPill, GlassCard, LiveBadge, TimeChip } from '@/components/ui';
 import {
   listLive,
   listScheduled,
+  myReminders,
+  toggleReminder,
   type Chatterbox,
 } from '@/lib/chatterbox';
 import { supabase } from '@/lib/supabase';
@@ -24,6 +26,7 @@ export default function Lobby() {
   const { session, loading } = useAuth();
   const [live, setLive] = useState<Chatterbox[]>([]);
   const [scheduled, setScheduled] = useState<Chatterbox[]>([]);
+  const [reminded, setReminded] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -31,10 +34,22 @@ export default function Lobby() {
       const [l, s] = await Promise.all([listLive(), listScheduled()]);
       setLive(l);
       setScheduled(s);
+      setReminded(await myReminders(s.map((b) => b.id)));
     } catch {
       // transient — pull-to-refresh recovers
     }
   }, []);
+
+  async function onRemind(box: Chatterbox) {
+    const on = !reminded.has(box.id);
+    setReminded((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(box.id);
+      else next.delete(box.id);
+      return next;
+    });
+    await toggleReminder(box.id, on).catch(() => refresh());
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -125,11 +140,20 @@ export default function Lobby() {
               <>
                 <Text style={styles.sectionLabel}>COMING UP</Text>
                 {scheduled.map((b) => (
-                  <GlassCard key={b.id} style={styles.card}>
-                    <TimeChip label={fmtTime(b.scheduled_at)} />
-                    <Text style={styles.cardTitle}>{b.title}</Text>
-                    {b.topic ? <Text style={styles.cardTopic}>{b.topic}</Text> : null}
-                  </GlassCard>
+                  <Pressable key={b.id} onPress={() => router.push(`/chatterbox/${b.id}`)}>
+                    <GlassCard style={styles.card}>
+                      <TimeChip label={fmtTime(b.scheduled_at)} />
+                      <Text style={styles.cardTitle}>{b.title}</Text>
+                      {b.topic ? <Text style={styles.cardTopic}>{b.topic}</Text> : null}
+                      <View style={styles.remindRow}>
+                        <GhostPill
+                          label={reminded.has(b.id) ? '✓ Reminded' : 'Remind me'}
+                          active={reminded.has(b.id)}
+                          onPress={() => onRemind(b)}
+                        />
+                      </View>
+                    </GlassCard>
+                  </Pressable>
                 ))}
               </>
             )}
@@ -195,6 +219,9 @@ const styles = StyleSheet.create({
   cardJoin: {
     ...type.label,
     color: color.orange500,
+  },
+  remindRow: {
+    flexDirection: 'row',
   },
   emptyTitle: {
     ...type.heading,

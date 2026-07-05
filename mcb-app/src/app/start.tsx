@@ -16,6 +16,14 @@ import { GhostPill, PrimaryPill } from '@/components/ui';
 import { createChatterbox } from '@/lib/chatterbox';
 import { color, font, radius, space, type } from '@/theme/tokens';
 
+function backToLobby() {
+  if (router.canGoBack()) {
+    router.back();
+  } else {
+    router.replace('/lobby');
+  }
+}
+
 const SCHEDULE_OPTIONS = [
   { label: 'in 15 min', minutes: 15 },
   { label: 'in 1 hour', minutes: 60 },
@@ -46,7 +54,7 @@ export default function StartChatterbox() {
       if (mode === 'now') {
         router.replace(`/chatterbox/${box.id}`);
       } else {
-        router.back();
+        backToLobby();
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong');
@@ -64,7 +72,7 @@ export default function StartChatterbox() {
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.headerRow}>
             <Text style={styles.title}>start a chatterbox</Text>
-            <Pressable onPress={() => router.back()}>
+            <Pressable onPress={backToLobby}>
               <Text style={styles.cancel}>cancel</Text>
             </Pressable>
           </View>
