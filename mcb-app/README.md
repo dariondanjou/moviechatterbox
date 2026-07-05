@@ -10,7 +10,19 @@ The v1.4 rebuild of [moviechatterbox.com](https://moviechatterbox.com): a single
 - ✅ Auth: email/password sign-in + sign-up against existing Supabase auth, session persisted in AsyncStorage, foreground-only token refresh (`src/providers/auth-provider.tsx`)
 - ✅ EAS profiles: `development` (dev client) / `preview` (internal) / `production` in `eas.json`
 
-Next per build order: audio core (Agora integration → stage roles → Chatterbox lifecycle → the Lobby).
+## Status: Audio core (build-order step 2) — in progress
+
+- ✅ DB schema: `mcb_profiles`, `mcb_chatterboxes` (scheduled/live/ended), `mcb_participants` (host/speaker/listener + raise hand), `mcb_messages` — RLS on all, role changes guarded server-side, realtime enabled (`supabase/migrations/` in repo root)
+- ✅ **LiveKit** (founder decision, supersedes Agora): `chatterbox-token` edge function mints role-scoped tokens (listeners can't publish); `livekit-client` on web, `@livekit/react-native` on native (needs a dev build)
+- ✅ The Lobby: live + scheduled Chatterboxes, realtime updates, start FAB
+- ✅ Start flow: go live now or schedule (quick presets)
+- ✅ Chatterbox screen: stage/audience, raise hand, host invite-to-stage/demote, mute, in-room text chat (also the audio-failure degradation channel per FR-2.1.5), emoji reactions via realtime broadcast, host End
+- ✅ Verified end-to-end on web: sign-in → create → host on stage → chat → LiveKit audio connected → end
+- ⏳ Remaining in step 2: recording/replays (FR-2.1.4), scheduled-box reminders + go-live transition, native dev-build audio test on real devices
+
+Smoke-test login: `mcb-smoketest@example.com` / `mcb-smoke-Passw0rd!`
+
+Next after step 2: database layer (TMDB ingestion → entity pages).
 
 ## Run it
 

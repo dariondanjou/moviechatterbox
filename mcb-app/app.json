@@ -30,6 +30,7 @@
     "plugins": [
       "expo-router",
       "expo-dev-client",
+      "@livekit/react-native-expo-plugin",
       [
         "expo-splash-screen",
         {

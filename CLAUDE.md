@@ -23,8 +23,8 @@ MovieChatterbox is a social audio platform for movie and TV lovers — live audi
 ## Stack
 
 - **App:** Expo (React Native) + TypeScript, Expo Router. Single codebase: iOS, Android, web.
-- **Backend:** Supabase (Postgres, Auth, Realtime, Storage). Existing production instance — migrations must preserve live users, ratings, reviews, watchlists (FR-8.1). Never run destructive migrations without an explicit go-ahead.
-- **Live audio:** Agora RN SDK. Aggressively disconnect idle/backgrounded clients (FR-4.1.4) — lurker minutes are billed.
+- **Backend:** Supabase (Postgres, Auth, Realtime, Storage). Same instance as the existing site, but **no migration required** (founder decision 2026-07-04, supersedes FR-8.1): users don't carry over, movie data comes fresh from TMDB. The rebuild uses new `mcb_`-prefixed tables in the same database. Additive schema changes are fine without asking; never drop or alter the live site's existing tables while moviechatterbox.com is up.
+- **Live audio:** LiveKit Cloud (founder decision 2026-07-04, supersedes Agora — account + keys already exist, FR-4.1.1 permits, and the FR-4.1.3 self-host path is LiveKit anyway). `livekit-client` on web, `@livekit/react-native` on native. Aggressively disconnect idle/backgrounded clients (FR-4.1.4) — lurker minutes are billed.
 - **Transcription:** Deepgram streaming, one stream per Chatterbox, gated at ≥10 listeners (FR-2.4.2).
 - **Payments:** Stripe (subscriptions) + Stripe Connect (creator payouts, 1099s).
 - **Ads:** AdMob/AdSense behind AppLovin MAX mediation — but ALL placement decisions go through our internal ad service (FR-3.2). UI code never calls ad SDKs directly.
@@ -60,7 +60,9 @@ MovieChatterbox is a social audio platform for movie and TV lovers — live audi
 
 Proceed without confirmation for anything inside the current build-order step: writing code, local package installs, feature-branch commits, running builds/tests/exports, and local scripts. Pick sensible defaults and note the decision in your summary instead of asking.
 
-Always stop and ask before: production Supabase migrations or any destructive data operation, deploys, pushing to remotes, spending money or signing up for external services (TMDB commercial, Agora, Stripe, EAS paid tiers), and anything requiring the founder's account logins.
+Also proceed without asking (founder authorization 2026-07-04): additive schema changes to the shared Supabase database (new `mcb_` tables, RLS, realtime publications) and Supabase edge function deploys/secrets.
+
+Always stop and ask before: destructive operations on the live site's existing tables, Vercel production deploys, pushing to remotes, spending money or signing up for external services (TMDB commercial tier, Stripe, EAS paid tiers), and anything requiring the founder's account logins.
 
 ## Current status
 
