@@ -19,6 +19,7 @@ import {
   type Chatterbox,
 } from '@/lib/chatterbox';
 import { supabase } from '@/lib/supabase';
+import { getTitlesByIds, type Title } from '@/lib/titles';
 import { useAuth } from '@/providers/auth-provider';
 import { color, font, radius, space, type } from '@/theme/tokens';
 
@@ -27,6 +28,7 @@ export default function Lobby() {
   const [live, setLive] = useState<Chatterbox[]>([]);
   const [scheduled, setScheduled] = useState<Chatterbox[]>([]);
   const [reminded, setReminded] = useState<Set<string>>(new Set());
+  const [titles, setTitles] = useState<Map<string, Title>>(new Map());
   const [refreshing, setRefreshing] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -34,11 +36,28 @@ export default function Lobby() {
       const [l, s] = await Promise.all([listLive(), listScheduled()]);
       setLive(l);
       setScheduled(s);
-      setReminded(await myReminders(s.map((b) => b.id)));
+      const [rem, t] = await Promise.all([
+        myReminders(s.map((b) => b.id)),
+        getTitlesByIds(
+          [...l, ...s].map((b) => b.entity_id).filter((x): x is string => !!x),
+        ),
+      ]);
+      setReminded(rem);
+      setTitles(t);
     } catch {
       // transient — pull-to-refresh recovers
     }
   }, []);
+
+  const filmChip = (b: Chatterbox) => {
+    const t = b.entity_id ? titles.get(b.entity_id) : undefined;
+    if (!t) return null;
+    return (
+      <Pressable onPress={() => router.push(`/title/${t.id}`)}>
+        <Text style={styles.filmChip}>🎬 {t.title}</Text>
+      </Pressable>
+    );
+  };
 
   async function onRemind(box: Chatterbox) {
     const on = !reminded.has(box.id);
@@ -87,9 +106,14 @@ export default function Lobby() {
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
         <Text style={styles.title}>the lobby</Text>
-        <Pressable onPress={() => supabase.auth.signOut()}>
-          <Text style={styles.signOut}>sign out</Text>
-        </Pressable>
+        <View style={styles.headerLinks}>
+          <Pressable onPress={() => router.push('/browse')}>
+            <Text style={styles.headerLink}>browse</Text>
+          </Pressable>
+          <Pressable onPress={() => supabase.auth.signOut()}>
+            <Text style={styles.signOut}>sign out</Text>
+          </Pressable>
+        </View>
       </View>
 
       <FlatList
@@ -130,6 +154,7 @@ export default function Lobby() {
               {item.topic ? (
                 <Text style={styles.cardTopic}>{item.topic}</Text>
               ) : null}
+              {filmChip(item)}
               <Text style={styles.cardJoin}>Join →</Text>
             </GlassCard>
           </Pressable>
@@ -145,6 +170,7 @@ export default function Lobby() {
                       <TimeChip label={fmtTime(b.scheduled_at)} />
                       <Text style={styles.cardTitle}>{b.title}</Text>
                       {b.topic ? <Text style={styles.cardTopic}>{b.topic}</Text> : null}
+                      {filmChip(b)}
                       <View style={styles.remindRow}>
                         <GhostPill
                           label={reminded.has(b.id) ? '✓ Reminded' : 'Remind me'}
@@ -189,6 +215,19 @@ const styles = StyleSheet.create({
   signOut: {
     ...type.label,
     color: color.textTertiary,
+  },
+  headerLinks: {
+    flexDirection: 'row',
+    gap: space.lg,
+    alignItems: 'baseline',
+  },
+  headerLink: {
+    ...type.label,
+    color: color.orange500,
+  },
+  filmChip: {
+    ...type.label,
+    color: color.orange300,
   },
   list: {
     paddingHorizontal: space.xl,

@@ -37,6 +37,7 @@ import {
 } from '@/lib/chatterbox';
 import { confirmAction } from '@/lib/confirm';
 import { supabase } from '@/lib/supabase';
+import { getTitle, type Title } from '@/lib/titles';
 import { useAuth } from '@/providers/auth-provider';
 import { color, font, radius, space, type } from '@/theme/tokens';
 
@@ -62,6 +63,7 @@ export default function ChatterboxScreen() {
   const myId = session?.user.id;
 
   const [box, setBox] = useState<Chatterbox | null>(null);
+  const [attachedTitle, setAttachedTitle] = useState<Title | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
@@ -107,11 +109,16 @@ export default function ChatterboxScreen() {
     }
   }, [id]);
 
-  // Load the box
+  // Load the box (+ attached entity for the film chip, FR-2.4.6 spirit)
   useEffect(() => {
     if (!id) return;
     getBox(id)
-      .then(setBox)
+      .then((b) => {
+        setBox(b);
+        if (b?.entity_id) {
+          getTitle(b.entity_id).then(setAttachedTitle).catch(() => {});
+        }
+      })
       .catch(() => setBox(null));
   }, [id]);
 
@@ -327,6 +334,13 @@ export default function ChatterboxScreen() {
           </View>
           <Text style={styles.roomTitle}>{box.title}</Text>
           {box.topic ? <Text style={styles.meta}>{box.topic}</Text> : null}
+          {attachedTitle && (
+            <Pressable onPress={() => router.push(`/title/${attachedTitle.id}`)}>
+              <Text style={styles.filmChip}>
+                🎬 {attachedTitle.title} · tap for the film page
+              </Text>
+            </Pressable>
+          )}
           {box.is_recorded && (
             <Text style={styles.recDisclosure}>
               This Chatterbox is being recorded.
@@ -508,6 +522,10 @@ const styles = StyleSheet.create({
   recDisclosure: {
     ...type.label,
     color: color.recordingText,
+  },
+  filmChip: {
+    ...type.label,
+    color: color.orange300,
   },
   roomTitle: {
     fontFamily: font.bold,

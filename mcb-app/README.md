@@ -20,9 +20,15 @@ The v1.4 rebuild of [moviechatterbox.com](https://moviechatterbox.com): a single
 - ✅ Verified end-to-end on web: sign-in → create → host on stage → chat → LiveKit audio connected → end
 - ⏳ Remaining in step 2: recording/replays (FR-2.1.4), scheduled-box reminders + go-live transition, native dev-build audio test on real devices
 
-Smoke-test login: `mcb-smoketest@example.com` / `mcb-smoke-Passw0rd!`
+## Status: Database layer (build-order step 3) — in progress
 
-Next after step 2: database layer (TMDB ingestion → entity pages).
+- ✅ `mcb_titles`: canonical IDs mapped to TMDB (FS-13.3), horror vertical + weekly trending ingested (`node scripts/mcb-ingest-tmdb.mjs` in repo root; 129 titles seeded)
+- ✅ Browse: responsive poster grid + debounced search
+- ✅ Title entity page: poster/meta/overview, attached live+scheduled Chatterboxes, TMDB attribution (FR-2.2.1 terms)
+- ✅ Entity-attached Chatterboxes (FR-2.1.1): start from a film page, film chip on Lobby cards and in the room linking back to the film page (FR-2.4.6 spirit)
+- ⏳ Remaining in step 3: person/episode entities, entity text threads (FR-2.2.2), profiles/lists layer
+
+Smoke-test login: `mcb-smoketest@example.com` / `mcb-smoke-Passw0rd!`
 
 ## Run it
 

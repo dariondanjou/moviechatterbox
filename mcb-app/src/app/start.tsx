@@ -1,4 +1,4 @@
-import { router, Stack } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -32,6 +32,11 @@ const SCHEDULE_OPTIONS = [
 ] as const;
 
 export default function StartChatterbox() {
+  const { entityType, entityId, entityTitle } = useLocalSearchParams<{
+    entityType?: string;
+    entityId?: string;
+    entityTitle?: string;
+  }>();
   const [title, setTitle] = useState('');
   const [topic, setTopic] = useState('');
   const [mode, setMode] = useState<'now' | 'later'>('now');
@@ -50,6 +55,8 @@ export default function StartChatterbox() {
           mode === 'later'
             ? new Date(Date.now() + minutes * 60_000)
             : undefined,
+        entityType: entityType || undefined,
+        entityId: entityId || undefined,
       });
       if (mode === 'now') {
         router.replace(`/chatterbox/${box.id}`);
@@ -76,6 +83,12 @@ export default function StartChatterbox() {
               <Text style={styles.cancel}>cancel</Text>
             </Pressable>
           </View>
+
+          {entityTitle ? (
+            <View style={styles.entityChip}>
+              <Text style={styles.entityChipText}>🎬 {entityTitle}</Text>
+            </View>
+          ) : null}
 
           <Text style={styles.fieldLabel}>WHAT'S IT ABOUT?</Text>
           <TextInput
@@ -178,6 +191,19 @@ const styles = StyleSheet.create({
     ...type.micro,
     color: color.textTertiary,
     marginTop: space.lg,
+  },
+  entityChip: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(245,135,31,0.12)',
+    borderColor: color.orange500,
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
+  },
+  entityChipText: {
+    ...type.label,
+    color: color.orange300,
   },
   input: {
     ...type.body,

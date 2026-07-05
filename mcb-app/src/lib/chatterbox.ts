@@ -16,6 +16,8 @@ export type Chatterbox = {
   started_at: string | null;
   ended_at: string | null;
   is_recorded: boolean;
+  entity_type: string | null;
+  entity_id: string | null;
   created_at: string;
 };
 
@@ -82,6 +84,8 @@ export async function createChatterbox(input: {
   title: string;
   topic?: string;
   scheduledAt?: Date;
+  entityType?: string;
+  entityId?: string;
 }): Promise<Chatterbox> {
   const user = (await supabase.auth.getUser()).data.user;
   if (!user) throw new Error('not signed in');
@@ -96,6 +100,8 @@ export async function createChatterbox(input: {
       status: live ? 'live' : 'scheduled',
       scheduled_at: input.scheduledAt?.toISOString() ?? null,
       started_at: live ? new Date().toISOString() : null,
+      entity_type: input.entityType ?? null,
+      entity_id: input.entityId ?? null,
     })
     .select()
     .single();
