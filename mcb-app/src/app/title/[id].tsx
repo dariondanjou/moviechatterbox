@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,7 +16,10 @@ import type { Chatterbox } from '@/lib/chatterbox';
 import {
   getTitle,
   listBoxesForEntity,
+  listThreadPosts,
   posterUrl,
+  postToThread,
+  type ThreadPost,
   type Title,
 } from '@/lib/titles';
 import { color, font, radius, space, type } from '@/theme/tokens';
@@ -24,6 +28,8 @@ export default function TitlePage() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [title, setTitle] = useState<Title | null>(null);
   const [boxes, setBoxes] = useState<Chatterbox[]>([]);
+  const [posts, setPosts] = useState<ThreadPost[]>([]);
+  const [draft, setDraft] = useState('');
 
   useEffect(() => {
     if (!id) return;
@@ -32,10 +38,24 @@ export default function TitlePage() {
         setTitle(t);
         if (t) {
           listBoxesForEntity(t.media_type, t.id).then(setBoxes).catch(() => {});
+          listThreadPosts(t.media_type, t.id).then(setPosts).catch(() => {});
         }
       })
       .catch(() => {});
   }, [id]);
+
+  async function submitPost() {
+    if (!title) return;
+    const body = draft.trim();
+    if (!body) return;
+    setDraft('');
+    try {
+      await postToThread(title.media_type, title.id, body);
+      setPosts(await listThreadPosts(title.media_type, title.id));
+    } catch {
+      setDraft(body);
+    }
+  }
 
   if (!title) {
     return (
@@ -121,6 +141,33 @@ export default function TitlePage() {
           </Pressable>
         ))}
 
+        <Text style={styles.sectionLabel}>DISCUSSION</Text>
+        <View style={styles.composerRow}>
+          <TextInput
+            style={styles.composerInput}
+            placeholder="Add to the conversation…"
+            placeholderTextColor={color.textTertiary}
+            value={draft}
+            onChangeText={setDraft}
+            onSubmitEditing={submitPost}
+            returnKeyType="send"
+          />
+          <Pressable onPress={submitPost}>
+            <Text style={styles.postBtn}>Post</Text>
+          </Pressable>
+        </View>
+        {posts.length === 0 && (
+          <Text style={styles.emptyBoxes}>No posts yet — say something.</Text>
+        )}
+        {posts.map((p) => (
+          <View key={p.id} style={styles.post}>
+            <Text style={styles.postAuthor}>
+              {p.profile?.display_name || p.profile?.handle || 'someone'}
+            </Text>
+            <Text style={styles.postBody}>{p.body}</Text>
+          </View>
+        ))}
+
         <Text style={styles.attribution}>
           Film and TV data from TMDB. This product uses the TMDB API but is not
           endorsed or certified by TMDB.
@@ -202,6 +249,41 @@ const styles = StyleSheet.create({
   },
   boxTitle: {
     ...type.heading,
+    color: color.textPrimary,
+  },
+  composerRow: {
+    flexDirection: 'row',
+    gap: space.sm,
+    alignItems: 'center',
+  },
+  composerInput: {
+    ...type.body,
+    flex: 1,
+    color: color.textPrimary,
+    backgroundColor: color.glass,
+    borderColor: color.glassBorder,
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
+  },
+  postBtn: {
+    ...type.label,
+    color: color.orange500,
+    paddingHorizontal: space.sm,
+  },
+  post: {
+    borderBottomWidth: 1,
+    borderBottomColor: color.glassBorder,
+    paddingVertical: space.md,
+    gap: space.xs,
+  },
+  postAuthor: {
+    ...type.label,
+    color: color.orange300,
+  },
+  postBody: {
+    ...type.body,
     color: color.textPrimary,
   },
   attribution: {
