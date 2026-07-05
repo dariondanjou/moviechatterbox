@@ -106,14 +106,6 @@ export default function Lobby() {
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
         <Text style={styles.title}>the lobby</Text>
-        <View style={styles.headerLinks}>
-          <Pressable onPress={() => router.push('/browse')}>
-            <Text style={styles.headerLink}>browse</Text>
-          </Pressable>
-          <Pressable onPress={() => router.push('/profile')}>
-            <Text style={styles.headerLink}>profile</Text>
-          </Pressable>
-        </View>
       </View>
 
       <FlatList
@@ -188,9 +180,6 @@ export default function Lobby() {
         }
       />
 
-      <Pressable style={styles.fab} onPress={() => router.push('/start')}>
-        <Text style={styles.fabPlus}>+</Text>
-      </Pressable>
     </SafeAreaView>
   );
 }
@@ -211,19 +200,6 @@ const styles = StyleSheet.create({
   title: {
     ...type.displayHeader,
     color: color.textPrimary,
-  },
-  signOut: {
-    ...type.label,
-    color: color.textTertiary,
-  },
-  headerLinks: {
-    flexDirection: 'row',
-    gap: space.lg,
-    alignItems: 'baseline',
-  },
-  headerLink: {
-    ...type.label,
-    color: color.orange500,
   },
   filmChip: {
     ...type.label,
@@ -270,27 +246,5 @@ const styles = StyleSheet.create({
   emptyBody: {
     ...type.body,
     color: color.textSecondary,
-  },
-  fab: {
-    position: 'absolute',
-    right: space.xxl,
-    bottom: space.xxxl,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: color.orange500,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: color.orange500,
-    shadowOpacity: 0.5,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-  },
-  fabPlus: {
-    fontFamily: font.bold,
-    fontSize: 30,
-    lineHeight: 34,
-    color: color.inkOnOrange,
   },
 });

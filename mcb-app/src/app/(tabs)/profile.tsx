@@ -74,9 +74,7 @@ export default function Profile() {
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.headerRow}>
-          <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/lobby'))}>
-            <Text style={styles.back}>← back</Text>
-          </Pressable>
+          <Text style={styles.pageTitle}>profile</Text>
           <Pressable onPress={() => supabase.auth.signOut()}>
             <Text style={styles.signOut}>sign out</Text>
           </Pressable>
@@ -193,9 +191,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  back: {
-    ...type.label,
-    color: color.textTertiary,
+  pageTitle: {
+    ...type.displayHeader,
+    color: color.textPrimary,
   },
   signOut: {
     ...type.label,

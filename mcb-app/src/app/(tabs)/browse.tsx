@@ -45,9 +45,6 @@ export default function Browse() {
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
         <Text style={styles.title}>browse</Text>
-        <Pressable onPress={() => router.push('/lobby')}>
-          <Text style={styles.headerLink}>the lobby</Text>
-        </Pressable>
       </View>
       <TextInput
         style={styles.search}
@@ -108,10 +105,6 @@ const styles = StyleSheet.create({
   title: {
     ...type.displayHeader,
     color: color.textPrimary,
-  },
-  headerLink: {
-    ...type.label,
-    color: color.orange500,
   },
   search: {
     ...type.body,
