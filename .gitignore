@@ -7,9 +7,10 @@ dist
 .vercel
 .DS_Store
 .claude/
-*.png
+/*.png
+tsconfig.tsbuildinfo
 
 supabase/.temp/
-.vercel
-.env*.local
 crawl.log
+
+MovieChatterbox design system.zip

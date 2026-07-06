@@ -16,6 +16,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 
+import { FloatingAudioBar } from '@/components/floating-audio-bar';
+import { AudioRoomProvider } from '@/providers/audio-room-provider';
 import { AuthProvider } from '@/providers/auth-provider';
 import { color } from '@/theme/tokens';
 
@@ -45,13 +47,16 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <StatusBar style="light" />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: color.bgScreen },
-        }}
-      />
+      <AudioRoomProvider>
+        <StatusBar style="light" />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: color.bgScreen },
+          }}
+        />
+        <FloatingAudioBar />
+      </AudioRoomProvider>
     </AuthProvider>
   );
 }

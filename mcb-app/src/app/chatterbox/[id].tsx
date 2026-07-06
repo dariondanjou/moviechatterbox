@@ -14,21 +14,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Avatar, GhostPill, LiveBadge, PrimaryPill } from '@/components/ui';
 import {
-  createAudioSession,
-  type AudioSession,
-} from '@/lib/audio-session';
-import {
   endChatterbox,
-  fetchAudioToken,
   getBox,
   goLive,
-  join,
-  leave,
   listMessages,
   listParticipants,
   sendMessage,
   setHandRaised,
-  setMuted,
   setRecording,
   setRole,
   type Chatterbox,
@@ -38,12 +30,11 @@ import {
 import { confirmAction } from '@/lib/confirm';
 import { supabase } from '@/lib/supabase';
 import { getTitle, type Title } from '@/lib/titles';
+import { useAudioRoom } from '@/providers/audio-room-provider';
 import { useAuth } from '@/providers/auth-provider';
 import { color, font, radius, space, type } from '@/theme/tokens';
 
 const REACTIONS = ['🖤', '😂', '🔥', '👏'] as const;
-
-type AudioState = 'connecting' | 'connected' | 'error' | 'idle';
 
 function displayName(p?: { display_name?: string | null; handle?: string | null }) {
   return p?.display_name || p?.handle || 'someone';
@@ -62,17 +53,16 @@ export default function ChatterboxScreen() {
   const { session } = useAuth();
   const myId = session?.user.id;
 
+  const audioRoom = useAudioRoom();
+  const { speaking, audioState } = audioRoom;
+
   const [box, setBox] = useState<Chatterbox | null>(null);
   const [attachedTitle, setAttachedTitle] = useState<Title | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
-  const [speaking, setSpeaking] = useState<Set<string>>(new Set());
-  const [audioState, setAudioState] = useState<AudioState>('idle');
   const [floats, setFloats] = useState<{ key: number; emoji: string }[]>([]);
 
-  const audioRef = useRef<AudioSession | null>(null);
-  const roleRef = useRef<string | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const me = participants.find((p) => p.user_id === myId);
@@ -90,25 +80,6 @@ export default function ChatterboxScreen() {
     }
   }, [id]);
 
-  const connectAudio = useCallback(async () => {
-    if (!id) return;
-    audioRef.current?.disconnect().catch(() => {});
-    setAudioState('connecting');
-    try {
-      const { token, url } = await fetchAudioToken(id);
-      const audio = createAudioSession({
-        onActiveSpeakers: (ids) => setSpeaking(new Set(ids)),
-        onDisconnected: () => setAudioState('idle'),
-      });
-      await audio.connect(url, token);
-      audioRef.current = audio;
-      setAudioState('connected');
-    } catch {
-      // Audio failure degrades to the text thread (FR-2.1.5)
-      setAudioState('error');
-    }
-  }, [id]);
-
   // Load the box (+ attached entity for the film chip, FR-2.4.6 spirit)
   useEffect(() => {
     if (!id) return;
@@ -123,29 +94,27 @@ export default function ChatterboxScreen() {
   }, [id]);
 
   const isLive = box?.status === 'live';
-  const hostId = box?.host_id;
 
-  // Join + data + audio while live (also covers a scheduled box going live)
+  // Join via the global audio provider (audio persists across navigation —
+  // leaving this screen does NOT leave the Chatterbox) + load room data.
   useEffect(() => {
-    if (!id || !myId || !isLive) return;
+    if (!id || !myId || !isLive || !box) return;
     let cancelled = false;
 
     (async () => {
-      await join(id, hostId === myId ? 'host' : 'listener').catch(() => {});
+      await audioRoom.joinRoom(box);
       await Promise.all([
         refreshParticipants(),
         listMessages(id).then((m) => !cancelled && setMessages(m)),
       ]);
-      if (!cancelled) await connectAudio();
     })();
 
     return () => {
       cancelled = true;
-      audioRef.current?.disconnect().catch(() => {});
-      audioRef.current = null;
-      leave(id).catch(() => {});
     };
-  }, [id, myId, isLive, hostId, connectAudio, refreshParticipants]);
+    // joinRoom no-ops when already in this box; box identity via id + isLive
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, myId, isLive]);
 
   // Realtime: participants, messages, box status, reactions
   useEffect(() => {
@@ -188,32 +157,13 @@ export default function ChatterboxScreen() {
     };
   }, [id, refreshParticipants]);
 
-  // Reconnect audio with new grants when my stage role changes (promotion/demotion)
-  useEffect(() => {
-    const role = me?.role ?? null;
-    if (role && roleRef.current && roleRef.current !== role) {
-      connectAudio();
-    }
-    roleRef.current = role;
-  }, [me?.role, connectAudio]);
-
-  // Room ended → disconnect and inform
-  useEffect(() => {
-    if (box?.status === 'ended') {
-      audioRef.current?.disconnect().catch(() => {});
-      setAudioState('idle');
-    }
-  }, [box?.status]);
-
   async function onMicPress() {
     if (!id || !me) return;
     if (!canSpeak) {
       await setHandRaised(id, !me.hand_raised).catch(() => {});
       return;
     }
-    const next = !me.muted;
-    await audioRef.current?.setMicEnabled(!next).catch(() => {});
-    await setMuted(id, next).catch(() => {});
+    await audioRoom.toggleMute();
   }
 
   function onParticipantPress(p: Participant) {
@@ -244,10 +194,12 @@ export default function ChatterboxScreen() {
         destructive: true,
         onConfirm: async () => {
           await endChatterbox(id!).catch(() => {});
+          await audioRoom.leaveRoom();
           backToLobby();
         },
       });
     } else {
+      audioRoom.leaveRoom();
       backToLobby();
     }
   }
@@ -313,6 +265,9 @@ export default function ChatterboxScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerBadges}>
+            <Pressable onPress={backToLobby} style={styles.collapseBtn}>
+              <Text style={styles.collapseChevron}>⌄</Text>
+            </Pressable>
             <LiveBadge />
             {box.is_recorded && (
               <View style={styles.recBadge}>
@@ -353,7 +308,7 @@ export default function ChatterboxScreen() {
             <Text style={styles.degradeText}>
               Audio unavailable right now — the conversation continues in text below.
             </Text>
-            <Pressable onPress={connectAudio}>
+            <Pressable onPress={audioRoom.reconnect}>
               <Text style={styles.degradeRetry}>Retry audio</Text>
             </Pressable>
           </View>
@@ -497,6 +452,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
+  },
+  collapseBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: color.glass,
+    borderColor: color.glassBorder,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  collapseChevron: {
+    fontFamily: font.bold,
+    fontSize: 16,
+    lineHeight: 18,
+    color: color.textPrimary,
   },
   listenerCount: {
     ...type.micro,
