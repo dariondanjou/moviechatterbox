@@ -46,13 +46,14 @@ Deno.serve(async (req) => {
       .maybeSingle(),
     supabase
       .from('mcb_participants')
-      .select('role,left_at')
+      .select('role,left_at,removed_at')
       .eq('box_id', boxId)
       .eq('user_id', user.id)
       .maybeSingle(),
   ]);
 
   if (!box || box.status !== 'live') return json({ error: 'not live' }, 409);
+  if (part?.removed_at) return json({ error: 'removed' }, 403); // FR-5.1
   if (!part || part.left_at) return json({ error: 'not a participant' }, 403);
 
   const canPublish = part.role === 'host' || part.role === 'speaker';

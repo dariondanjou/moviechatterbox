@@ -151,11 +151,30 @@ export function AudioRoomProvider({ children }: PropsWithChildren) {
           filter: `box_id=eq.${box.id}`,
         },
         (payload) => {
-          const row = payload.new as { user_id: string; role: StageRole };
-          if (row.user_id === myId && row.role !== role) {
+          const row = payload.new as {
+            user_id: string;
+            role: StageRole;
+            muted: boolean;
+            removed_at: string | null;
+          };
+          if (row.user_id !== myId) return;
+          // Removed by the host (FR-5.1) → fully out, no rejoin
+          if (row.removed_at) {
+            leaveRoom();
+            return;
+          }
+          if (row.role !== role) {
             setRole(row.role);
             setMuted(true);
             connectAudio(box.id);
+            return;
+          }
+          // Host force-mute (FR-5.1): hard-cut the mic locally too
+          if (row.muted) {
+            setMuted((m) => {
+              if (!m) audioRef.current?.setMicEnabled(false).catch(() => {});
+              return true;
+            });
           }
         },
       )

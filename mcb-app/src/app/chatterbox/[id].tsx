@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ActionSheet, type SheetOption } from '@/components/action-sheet';
 import { Avatar, GhostPill, LiveBadge, PrimaryPill } from '@/components/ui';
 import {
   endChatterbox,
@@ -28,6 +29,17 @@ import {
   type Participant,
 } from '@/lib/chatterbox';
 import { confirmAction } from '@/lib/confirm';
+import {
+  blockUser,
+  forceMute,
+  getMyParticipation,
+  listBlockedIds,
+  removeFromChatterbox,
+  submitReport,
+  unblockUser,
+  REPORT_REASONS,
+  type ReportTargetType,
+} from '@/lib/moderation';
 import { supabase } from '@/lib/supabase';
 import { getTitle, type Title } from '@/lib/titles';
 import { useAudioRoom } from '@/providers/audio-room-provider';
@@ -62,6 +74,16 @@ export default function ChatterboxScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [floats, setFloats] = useState<{ key: number; emoji: string }[]>([]);
+
+  // Moderation (FR-5.1)
+  const [sheetFor, setSheetFor] = useState<Participant | null>(null);
+  const [reportTarget, setReportTarget] = useState<{
+    type: ReportTargetType;
+    id: string;
+    label: string;
+  } | null>(null);
+  const [blocked, setBlocked] = useState<Set<string>>(new Set());
+  const [removed, setRemoved] = useState(false);
 
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
@@ -103,9 +125,17 @@ export default function ChatterboxScreen() {
 
     (async () => {
       await audioRoom.joinRoom(box);
+      // A removed user's rejoin upsert is rejected server-side (FR-5.1)
+      const mine = await getMyParticipation(id).catch(() => null);
+      if (mine?.removed_at) {
+        if (!cancelled) setRemoved(true);
+        audioRoom.leaveRoom();
+        return;
+      }
       await Promise.all([
         refreshParticipants(),
         listMessages(id).then((m) => !cancelled && setMessages(m)),
+        listBlockedIds().then((b) => !cancelled && setBlocked(b)),
       ]);
     })();
 
@@ -124,7 +154,15 @@ export default function ChatterboxScreen() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'mcb_participants', filter: `box_id=eq.${id}` },
-        () => refreshParticipants(),
+        (payload) => {
+          const row = payload.new as
+            | { user_id?: string; removed_at?: string | null }
+            | undefined;
+          if (row?.user_id && row.user_id === myId && row.removed_at) {
+            setRemoved(true);
+          }
+          refreshParticipants();
+        },
       )
       .on(
         'postgres_changes',
@@ -155,7 +193,7 @@ export default function ChatterboxScreen() {
       supabase.removeChannel(channel);
       channelRef.current = null;
     };
-  }, [id, refreshParticipants]);
+  }, [id, myId, refreshParticipants]);
 
   async function onMicPress() {
     if (!id || !me) return;
@@ -167,15 +205,76 @@ export default function ChatterboxScreen() {
   }
 
   function onParticipantPress(p: Participant) {
-    if (!isHost || !id || p.user_id === myId) return;
-    const promote = p.role === 'listener';
-    confirmAction({
-      title: displayName(p.profile),
-      message: promote ? 'Invite to the stage?' : 'Move back to the audience?',
-      confirmLabel: promote ? 'Invite to stage' : 'Move to audience',
-      onConfirm: () =>
-        setRole(id, p.user_id, promote ? 'speaker' : 'listener').catch(() => {}),
+    if (!id || p.user_id === myId) return;
+    setSheetFor(p);
+  }
+
+  // Moderation menu (FR-5.1): host stage/mute/remove controls + report/block
+  function sheetOptions(p: Participant): SheetOption[] {
+    if (!id) return [];
+    const name = displayName(p.profile);
+    const options: SheetOption[] = [];
+
+    if (isHost && p.role !== 'host') {
+      options.push(
+        p.role === 'listener'
+          ? {
+              label: 'Invite to the stage',
+              onPress: () => setRole(id, p.user_id, 'speaker').catch(() => {}),
+            }
+          : {
+              label: 'Move to the audience',
+              onPress: () => setRole(id, p.user_id, 'listener').catch(() => {}),
+            },
+      );
+      if (p.role !== 'listener' && !p.muted) {
+        options.push({
+          label: 'Mute their mic',
+          onPress: () => forceMute(id, p.user_id).catch(() => {}),
+        });
+      }
+      options.push({
+        label: 'Remove from this Chatterbox',
+        destructive: true,
+        onPress: () =>
+          confirmAction({
+            title: `Remove ${name}?`,
+            message: 'They will not be able to rejoin this Chatterbox.',
+            confirmLabel: 'Remove',
+            destructive: true,
+            onConfirm: () => removeFromChatterbox(id, p.user_id).catch(() => {}),
+          }),
+      });
+    }
+
+    options.push({
+      label: `Report ${name}`,
+      destructive: true,
+      onPress: () => setReportTarget({ type: 'user', id: p.user_id, label: name }),
     });
+    options.push(
+      blocked.has(p.user_id)
+        ? {
+            label: `Unblock ${name}`,
+            onPress: () => {
+              unblockUser(p.user_id).catch(() => {});
+              setBlocked((b) => {
+                const next = new Set(b);
+                next.delete(p.user_id);
+                return next;
+              });
+            },
+          }
+        : {
+            label: `Block ${name}`,
+            destructive: true,
+            onPress: () => {
+              blockUser(p.user_id).catch(() => {});
+              setBlocked((b) => new Set(b).add(p.user_id));
+            },
+          },
+    );
+    return options;
   }
 
   async function onSend() {
@@ -219,6 +318,20 @@ export default function ChatterboxScreen() {
     return (
       <SafeAreaView style={styles.screen}>
         <Text style={styles.meta}>Opening…</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (removed) {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <View style={styles.endedWrap}>
+          <Text style={styles.endedTitle}>
+            The host removed you from this Chatterbox
+          </Text>
+          <Text style={styles.meta}>{box.title}</Text>
+          <GhostPill label="Back to the Lobby" onPress={backToLobby} />
+        </View>
       </SafeAreaView>
     );
   }
@@ -366,15 +479,26 @@ export default function ChatterboxScreen() {
         {/* Chat */}
         <FlatList
           style={styles.chat}
-          data={messages}
+          data={messages.filter((m) => !blocked.has(m.user_id))}
           keyExtractor={(m) => m.id}
           renderItem={({ item }) => (
-            <View style={styles.msgRow}>
-              <Text style={styles.msgAuthor}>
-                {displayName(item.profile ?? profileOf(item.user_id))}
-              </Text>
-              <Text style={styles.msgBody}>{item.body}</Text>
-            </View>
+            <Pressable
+              onLongPress={() =>
+                item.user_id !== myId &&
+                setReportTarget({
+                  type: 'message',
+                  id: item.id,
+                  label: displayName(item.profile ?? profileOf(item.user_id)),
+                })
+              }
+            >
+              <View style={styles.msgRow}>
+                <Text style={styles.msgAuthor}>
+                  {displayName(item.profile ?? profileOf(item.user_id))}
+                </Text>
+                <Text style={styles.msgBody}>{item.body}</Text>
+              </View>
+            </Pressable>
           )}
         />
 
@@ -420,6 +544,39 @@ export default function ChatterboxScreen() {
             </Text>
           </Pressable>
         </View>
+
+        {/* Moderation sheets (FR-5.1) */}
+        <ActionSheet
+          visible={!!sheetFor}
+          title={sheetFor ? displayName(sheetFor.profile) : ''}
+          subtitle={
+            sheetFor?.role === 'listener' ? 'in the audience' : 'on the stage'
+          }
+          options={sheetFor ? sheetOptions(sheetFor) : []}
+          onClose={() => setSheetFor(null)}
+        />
+        <ActionSheet
+          visible={!!reportTarget}
+          title={
+            reportTarget?.type === 'message'
+              ? `Report ${reportTarget.label}'s message`
+              : `Report ${reportTarget?.label ?? ''}`
+          }
+          subtitle="What's wrong?"
+          options={REPORT_REASONS.map((r) => ({
+            label: r.label,
+            onPress: () => {
+              if (!reportTarget || !id) return;
+              submitReport({
+                targetType: reportTarget.type,
+                targetId: reportTarget.id,
+                boxId: id,
+                reason: r.value,
+              }).catch(() => {});
+            },
+          }))}
+          onClose={() => setReportTarget(null)}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
