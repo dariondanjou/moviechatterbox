@@ -68,6 +68,10 @@ export default function TabsLayout() {
       <Tabs.Screen name="browse" />
       <Tabs.Screen name="activity" />
       <Tabs.Screen name="profile" />
+      {/* Detail pages live inside the tab navigator so the bottom bar is
+          always available; they get no tab slot of their own. */}
+      <Tabs.Screen name="title/[id]" />
+      <Tabs.Screen name="person/[id]" />
     </Tabs>
   );
 }
