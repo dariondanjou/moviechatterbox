@@ -95,6 +95,17 @@ try {
     total += await upsert(tv.results.map((t) => mapItem(t, 'tv')));
   }
 
+  // Popular across all genres — conversations aren't horror-only even if
+  // launch programming is (§1.3)
+  for (let page = 1; page <= Math.max(2, Math.floor(PAGES / 2)); page++) {
+    const movies = await tmdb('/movie/popular', { page });
+    total += await upsert(movies.results.map((m) => mapItem(m, 'movie')));
+    const tv = await tmdb('/tv/popular', { page });
+    total += await upsert(tv.results.map((t) => mapItem(t, 'tv')));
+    const top = await tmdb('/movie/top_rated', { page });
+    total += await upsert(top.results.map((m) => mapItem(m, 'movie')));
+  }
+
   // Plus what everyone is talking about right now, all genres
   for (let page = 1; page <= 2; page++) {
     const trending = await tmdb('/trending/all/week', { page });

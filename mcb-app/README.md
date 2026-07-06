@@ -22,7 +22,8 @@ The v1.4 rebuild of [moviechatterbox.com](https://moviechatterbox.com): a single
 
 ## Status: Database layer (build-order step 3) — in progress
 
-- ✅ `mcb_titles`: canonical IDs mapped to TMDB (FS-13.3), horror vertical + weekly trending ingested (`node scripts/mcb-ingest-tmdb.mjs` in repo root; 129 titles seeded)
+- ✅ `mcb_titles`: canonical IDs mapped to TMDB (FS-13.3) — horror vertical + popular + top-rated + trending (579 titles, 5k+ persons seeded via `scripts/mcb-ingest-tmdb.mjs` / `mcb-ingest-credits.mjs`)
+- ✅ **Catalog grows unattended**: `mcb-ingest` edge function runs nightly at 09:00 UTC via pg_cron (daily trending + horror discover + credits backfill) — Solo-Operator Principle
 - ✅ Browse: responsive poster grid + debounced search
 - ✅ Title entity page: poster/meta/overview, attached live+scheduled Chatterboxes, TMDB attribution (FR-2.2.1 terms)
 - ✅ Entity-attached Chatterboxes (FR-2.1.1): start from a film page, film chip on Lobby cards and in the room linking back to the film page (FR-2.4.6 spirit)
