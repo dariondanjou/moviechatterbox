@@ -21,6 +21,7 @@ import {
   setMyRating,
   toggleWatchlist,
 } from '@/lib/library';
+import { creditsForTitle, personImgUrl, type CastMember } from '@/lib/persons';
 import {
   getTitle,
   listBoxesForEntity,
@@ -44,6 +45,7 @@ export default function TitlePage() {
     count: 0,
   });
   const [inWatchlist, setInWatchlist] = useState(false);
+  const [credits, setCredits] = useState<CastMember[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -56,6 +58,7 @@ export default function TitlePage() {
           getMyRating(t.media_type, t.id).then(setMyRatingState).catch(() => {});
           ratingSummary(t.media_type, t.id).then(setCommunity).catch(() => {});
           isWatchlisted(t.media_type, t.id).then(setInWatchlist).catch(() => {});
+          creditsForTitle(t.id).then(setCredits).catch(() => {});
         }
       })
       .catch(() => {});
@@ -167,6 +170,35 @@ export default function TitlePage() {
         {title.overview ? (
           <Text style={styles.overview}>{title.overview}</Text>
         ) : null}
+
+        {credits.length > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>CAST & CREW</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.castRow}>
+                {credits.map((c) => (
+                  <Pressable
+                    key={`${c.id}:${c.kind}`}
+                    style={styles.castCell}
+                    onPress={() => router.push(`/person/${c.id}`)}
+                  >
+                    <Image
+                      source={{ uri: personImgUrl(c.profile_path) ?? undefined }}
+                      style={styles.castPhoto}
+                      contentFit="cover"
+                    />
+                    <Text style={styles.castName} numberOfLines={1}>
+                      {c.name}
+                    </Text>
+                    <Text style={styles.castRole} numberOfLines={1}>
+                      {c.role ?? ''}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </ScrollView>
+          </>
+        )}
 
         <Text style={styles.sectionLabel}>CHATTERBOXES</Text>
         {boxes.length === 0 && (
@@ -320,6 +352,31 @@ const styles = StyleSheet.create({
   },
   communityText: {
     ...type.label,
+    color: color.textTertiary,
+  },
+  castRow: {
+    flexDirection: 'row',
+    gap: space.md,
+  },
+  castCell: {
+    width: 84,
+  },
+  castPhoto: {
+    width: 84,
+    height: 104,
+    borderRadius: radius.sm,
+    backgroundColor: color.surface1,
+    borderWidth: 1,
+    borderColor: color.glassBorder,
+  },
+  castName: {
+    ...type.label,
+    color: color.textPrimary,
+    marginTop: space.xs,
+  },
+  castRole: {
+    fontFamily: font.regular,
+    fontSize: 11,
     color: color.textTertiary,
   },
   composerRow: {
