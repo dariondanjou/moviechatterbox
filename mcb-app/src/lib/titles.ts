@@ -1,3 +1,4 @@
+import { emitSignal } from '@/lib/signals';
 import { supabase } from '@/lib/supabase';
 
 import type { Chatterbox } from './chatterbox';
@@ -111,6 +112,7 @@ export async function postToThread(
     body,
   });
   if (error) throw error;
+  emitSignal('thread_post', { entityType, entityId });
 }
 
 /** Active/scheduled Chatterboxes attached to an entity (FR-2.2.2). */

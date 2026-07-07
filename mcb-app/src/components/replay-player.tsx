@@ -1,7 +1,9 @@
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { formatDuration, replayUrl, type Replay } from '@/lib/replays';
+import { emitSignal } from '@/lib/signals';
 import { color, font, radius, space, type } from '@/theme/tokens';
 
 /**
@@ -17,12 +19,29 @@ export function ReplayPlayer({ replay }: { replay: Replay }) {
   const playing = status.playing;
   const duration = status.duration || replay.duration_seconds || 0;
   const progress = duration > 0 ? Math.min(status.currentTime / duration, 1) : 0;
+  const playedRef = useRef(false);
+
+  function onPlayPause() {
+    if (playing) {
+      player.pause();
+      return;
+    }
+    player.play();
+    if (!playedRef.current) {
+      playedRef.current = true;
+      emitSignal('replay_play', {
+        boxId: replay.box_id,
+        entityType: replay.box?.entity_type,
+        entityId: replay.box?.entity_id,
+      });
+    }
+  }
 
   return (
     <View style={styles.card}>
       <Pressable
         style={[styles.playBtn, playing && styles.playBtnActive]}
-        onPress={() => (playing ? player.pause() : player.play())}
+        onPress={onPlayPause}
       >
         <Text style={styles.playIcon}>{playing ? '❚❚' : '▶'}</Text>
       </Pressable>

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { emitSignal } from '@/lib/signals';
 import {
   listTrendingTitles,
   posterUrl,
@@ -39,6 +40,14 @@ export default function Browse() {
       cancelled = true;
       clearTimeout(t);
     };
+  }, [query]);
+
+  // Search signal (FR-11.1): log settled queries, not every keystroke
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) return;
+    const t = setTimeout(() => emitSignal('search', { meta: { query: q } }), 1500);
+    return () => clearTimeout(t);
   }, [query]);
 
   return (

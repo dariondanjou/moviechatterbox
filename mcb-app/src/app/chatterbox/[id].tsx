@@ -42,6 +42,7 @@ import {
   type ReportTargetType,
 } from '@/lib/moderation';
 import { listReplaysForBox, type Replay } from '@/lib/replays';
+import { emitSignal } from '@/lib/signals';
 import { supabase } from '@/lib/supabase';
 import { getTitle, type Title } from '@/lib/titles';
 import { useAudioRoom } from '@/providers/audio-room-provider';
@@ -321,6 +322,12 @@ export default function ChatterboxScreen() {
       type: 'broadcast',
       event: 'reaction',
       payload: { emoji },
+    });
+    emitSignal('reaction', {
+      boxId: id,
+      entityType: box?.entity_type,
+      entityId: box?.entity_id,
+      meta: { emoji },
     });
   }
 

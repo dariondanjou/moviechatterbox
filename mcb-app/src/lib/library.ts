@@ -1,3 +1,4 @@
+import { emitSignal } from '@/lib/signals';
 import { supabase } from '@/lib/supabase';
 
 // Letterboxd layer: ratings, watchlist (system list), profiles (FR-2.3.x).
@@ -68,6 +69,7 @@ export async function setMyRating(
     updated_at: new Date().toISOString(),
   });
   if (error) throw error;
+  emitSignal('rate', { entityType, entityId, value: rating });
 }
 
 /** Community average — fine to compute client-side at current scale. */
@@ -157,6 +159,7 @@ export async function toggleWatchlist(
       .eq('entity_id', entityId);
     if (error) throw error;
   }
+  emitSignal(on ? 'watchlist_add' : 'watchlist_remove', { entityType, entityId });
 }
 
 export async function listWatchlistItems(): Promise<

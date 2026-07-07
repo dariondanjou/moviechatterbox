@@ -1,3 +1,4 @@
+import { emitSignal } from '@/lib/signals';
 import { supabase } from '@/lib/supabase';
 
 // Data layer for Chatterboxes (FR-2.1.x). SQL uses "box" internally;
@@ -109,6 +110,11 @@ export async function createChatterbox(input: {
 
   if (live) {
     await join(data.id, 'host');
+    emitSignal('box_host', {
+      boxId: data.id,
+      entityType: data.entity_type,
+      entityId: data.entity_id,
+    });
   }
   return data;
 }
@@ -120,6 +126,7 @@ export async function goLive(boxId: string): Promise<void> {
     .eq('id', boxId);
   if (error) throw error;
   await join(boxId, 'host');
+  emitSignal('box_host', { boxId });
 }
 
 export async function endChatterbox(boxId: string): Promise<void> {

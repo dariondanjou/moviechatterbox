@@ -24,6 +24,7 @@ import {
 } from '@/lib/library';
 import { creditsForTitle, personImgUrl, type CastMember } from '@/lib/persons';
 import { listReplaysForEntity, type Replay } from '@/lib/replays';
+import { emitSignal } from '@/lib/signals';
 import {
   getTitle,
   listBoxesForEntity,
@@ -67,6 +68,20 @@ export default function TitlePage() {
       })
       .catch(() => {});
   }, [id]);
+
+  // Dwell signal (FR-11.1): one title_view per visit, emitted on the way out
+  useEffect(() => {
+    if (!title) return;
+    const t0 = Date.now();
+    const { media_type, id: entityId } = title;
+    return () => {
+      emitSignal('title_view', {
+        entityType: media_type,
+        entityId,
+        value: Math.round((Date.now() - t0) / 1000),
+      });
+    };
+  }, [title?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function onRate(rating: number | null) {
     if (!title) return;

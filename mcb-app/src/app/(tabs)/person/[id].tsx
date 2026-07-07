@@ -18,6 +18,7 @@ import {
   personImgUrl,
   type Person,
 } from '@/lib/persons';
+import { emitSignal } from '@/lib/signals';
 import { listBoxesForEntity, posterUrl, type Title } from '@/lib/titles';
 import { color, font, radius, space, type } from '@/theme/tokens';
 
@@ -39,6 +40,20 @@ export default function PersonPage() {
       })
       .catch(() => {});
   }, [id]);
+
+  // Dwell signal (FR-11.1), emitted on the way out
+  useEffect(() => {
+    if (!person) return;
+    const t0 = Date.now();
+    const entityId = person.id;
+    return () => {
+      emitSignal('person_view', {
+        entityType: 'person',
+        entityId,
+        value: Math.round((Date.now() - t0) / 1000),
+      });
+    };
+  }, [person?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!person) {
     return (

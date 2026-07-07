@@ -17,6 +17,7 @@ import {
   type Chatterbox,
   type StageRole,
 } from '@/lib/chatterbox';
+import { emitSignal } from '@/lib/signals';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -71,6 +72,7 @@ export function AudioRoomProvider({ children }: PropsWithChildren) {
   const audioRef = useRef<AudioSession | null>(null);
   const boxRef = useRef<Chatterbox | null>(null);
   boxRef.current = box;
+  const joinedAtRef = useRef<number | null>(null);
 
   const disconnectAudio = useCallback(async () => {
     const audio = audioRef.current;
@@ -98,6 +100,16 @@ export function AudioRoomProvider({ children }: PropsWithChildren) {
 
   const leaveRoom = useCallback(async () => {
     const current = boxRef.current;
+    // listening duration signal (FR-11.1)
+    if (current && joinedAtRef.current) {
+      emitSignal('box_listen', {
+        boxId: current.id,
+        entityType: current.entity_type,
+        entityId: current.entity_id,
+        value: Math.round((Date.now() - joinedAtRef.current) / 1000),
+      });
+    }
+    joinedAtRef.current = null;
     setBox(null);
     setRole(null);
     setMuted(true);
@@ -115,6 +127,13 @@ export function AudioRoomProvider({ children }: PropsWithChildren) {
       setBox(next);
       setRole(myRole);
       setMuted(true);
+      joinedAtRef.current = Date.now();
+      emitSignal('box_join', {
+        boxId: next.id,
+        entityType: next.entity_type,
+        entityId: next.entity_id,
+        meta: { role: myRole },
+      });
       await join(next.id, myRole).catch(() => {});
       await connectAudio(next.id);
     },
@@ -128,6 +147,13 @@ export function AudioRoomProvider({ children }: PropsWithChildren) {
       const next = !m;
       audioRef.current?.setMicEnabled(!next).catch(() => {});
       setMutedDb(current.id, next).catch(() => {});
+      if (!next) {
+        emitSignal('box_speak', {
+          boxId: current.id,
+          entityType: current.entity_type,
+          entityId: current.entity_id,
+        });
+      }
       return next;
     });
   }, []);
