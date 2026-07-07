@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RatingStars } from '@/components/rating-stars';
+import { ReplayPlayer } from '@/components/replay-player';
 import { GhostPill, GlassCard, LiveBadge, PrimaryPill, TimeChip } from '@/components/ui';
 import type { Chatterbox } from '@/lib/chatterbox';
 import {
@@ -22,6 +23,7 @@ import {
   toggleWatchlist,
 } from '@/lib/library';
 import { creditsForTitle, personImgUrl, type CastMember } from '@/lib/persons';
+import { listReplaysForEntity, type Replay } from '@/lib/replays';
 import {
   getTitle,
   listBoxesForEntity,
@@ -46,6 +48,7 @@ export default function TitlePage() {
   });
   const [inWatchlist, setInWatchlist] = useState(false);
   const [credits, setCredits] = useState<CastMember[]>([]);
+  const [replays, setReplays] = useState<Replay[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -59,6 +62,7 @@ export default function TitlePage() {
           ratingSummary(t.media_type, t.id).then(setCommunity).catch(() => {});
           isWatchlisted(t.media_type, t.id).then(setInWatchlist).catch(() => {});
           creditsForTitle(t.id).then(setCredits).catch(() => {});
+          listReplaysForEntity(t.id).then(setReplays).catch(() => {});
         }
       })
       .catch(() => {});
@@ -229,6 +233,24 @@ export default function TitlePage() {
           </Pressable>
         ))}
 
+        {replays.length > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>REPLAYS</Text>
+            {replays.map((r) => (
+              <View key={r.id} style={styles.replayBlock}>
+                {r.box && (
+                  <Pressable onPress={() => router.push(`/chatterbox/${r.box_id}`)}>
+                    <Text style={styles.replayTitle} numberOfLines={1}>
+                      {r.box.title}
+                    </Text>
+                  </Pressable>
+                )}
+                <ReplayPlayer replay={r} />
+              </View>
+            ))}
+          </>
+        )}
+
         <Text style={styles.sectionLabel}>DISCUSSION</Text>
         <View style={styles.composerRow}>
           <TextInput
@@ -334,6 +356,14 @@ const styles = StyleSheet.create({
   boxCard: {
     gap: space.sm,
     marginBottom: space.sm,
+  },
+  replayBlock: {
+    gap: space.xs,
+    marginBottom: space.sm,
+  },
+  replayTitle: {
+    ...type.label,
+    color: color.textSecondary,
   },
   boxTitle: {
     ...type.heading,

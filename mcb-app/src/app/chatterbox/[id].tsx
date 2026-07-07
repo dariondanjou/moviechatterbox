@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ActionSheet, type SheetOption } from '@/components/action-sheet';
+import { ReplayPlayer } from '@/components/replay-player';
 import { Avatar, GhostPill, LiveBadge, PrimaryPill } from '@/components/ui';
 import {
   endChatterbox,
@@ -40,6 +41,7 @@ import {
   REPORT_REASONS,
   type ReportTargetType,
 } from '@/lib/moderation';
+import { listReplaysForBox, type Replay } from '@/lib/replays';
 import { supabase } from '@/lib/supabase';
 import { getTitle, type Title } from '@/lib/titles';
 import { useAudioRoom } from '@/providers/audio-room-provider';
@@ -84,6 +86,7 @@ export default function ChatterboxScreen() {
   } | null>(null);
   const [blocked, setBlocked] = useState<Set<string>>(new Set());
   const [removed, setRemoved] = useState(false);
+  const [replays, setReplays] = useState<Replay[]>([]);
 
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
@@ -116,6 +119,12 @@ export default function ChatterboxScreen() {
   }, [id]);
 
   const isLive = box?.status === 'live';
+
+  // Ended rooms surface their replay once the finalizer has it (FR-2.1.4)
+  useEffect(() => {
+    if (!id || box?.status !== 'ended') return;
+    listReplaysForBox(id).then(setReplays).catch(() => {});
+  }, [id, box?.status]);
 
   // Join via the global audio provider (audio persists across navigation —
   // leaving this screen does NOT leave the Chatterbox) + load room data.
@@ -292,6 +301,10 @@ export default function ChatterboxScreen() {
         confirmLabel: 'End for everyone',
         destructive: true,
         onConfirm: async () => {
+          if (box?.is_recorded) {
+            // finalize the replay instead of waiting for the room to empty
+            setRecording(id!, false).catch(() => {});
+          }
           await endChatterbox(id!).catch(() => {});
           await audioRoom.leaveRoom();
           backToLobby();
@@ -351,6 +364,11 @@ export default function ChatterboxScreen() {
             {box.status === 'ended' ? 'This Chatterbox has ended' : 'Not live yet'}
           </Text>
           <Text style={styles.meta}>{box.title}</Text>
+          {replays.map((r) => (
+            <View key={r.id} style={styles.replayWrap}>
+              <ReplayPlayer replay={r} />
+            </View>
+          ))}
           {box.status === 'scheduled' && scheduledFor && (
             <Text style={styles.meta}>Scheduled for {scheduledFor}</Text>
           )}
@@ -604,6 +622,9 @@ const styles = StyleSheet.create({
     fontFamily: font.bold,
     fontSize: 21,
     color: color.textPrimary,
+  },
+  replayWrap: {
+    alignSelf: 'stretch',
   },
   headerBadges: {
     flexDirection: 'row',

@@ -223,16 +223,17 @@ export async function sendMessage(boxId: string, body: string) {
 }
 
 /**
- * Toggle recording disclosure (FR-2.1.4, FR-5.4). Host-only via RLS.
- * Actual media egress lands once storage credentials are configured;
- * the in-room REC disclosure is honest from day one.
+ * Start/stop actual recording (FR-2.1.4, FR-5.4). Host-only, enforced by
+ * the edge function, which drives LiveKit egress and the is_recorded
+ * disclosure flag together so the REC badge always reflects real capture.
  */
 export async function setRecording(boxId: string, on: boolean) {
-  const { error } = await supabase
-    .from('mcb_chatterboxes')
-    .update({ is_recorded: on })
-    .eq('id', boxId);
+  const { data, error } = await supabase.functions.invoke(
+    'chatterbox-recording',
+    { body: { boxId, action: on ? 'start' : 'stop' } },
+  );
   if (error) throw error;
+  if (data?.error) throw new Error(data.error);
 }
 
 export async function toggleReminder(boxId: string, on: boolean) {

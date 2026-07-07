@@ -38,7 +38,8 @@
           "image": "./assets/brand/icon-orange.png",
           "imageWidth": 120
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,
