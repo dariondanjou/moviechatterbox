@@ -1,7 +1,9 @@
 import { router, Tabs } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { FeedbackModal } from '@/components/feedback-modal';
 import { color, elevation, font, radius, space, type } from '@/theme/tokens';
 
 // Bottom tab bar per design board 1b: Lobby · Browse · center orange + FAB ·
@@ -24,6 +26,7 @@ type TabBarProps = {
 function TabBar({ state, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
   const current = state.routes[state.index]?.name;
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   const slot = (tab: (typeof TABS)[number]) => {
     const active = current === tab.name;
@@ -51,6 +54,15 @@ function TabBar({ state, navigation }: TabBarProps) {
       </View>
       {slot(TABS[2])}
       {slot(TABS[3])}
+      {/* Feedback (founder request 2026-07-08) — opens a sheet, not a route.
+          Off design board 1b (which has 4 tabs + FAB); flagged, not silent. */}
+      <Pressable style={styles.slot} onPress={() => setFeedbackOpen(true)}>
+        <Text style={styles.label}>feedback</Text>
+      </Pressable>
+      <FeedbackModal
+        visible={feedbackOpen}
+        onClose={() => setFeedbackOpen(false)}
+      />
     </View>
   );
 }
