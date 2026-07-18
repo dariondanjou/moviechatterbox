@@ -40,6 +40,7 @@ MovieChatterbox is a social audio platform for movie and TV lovers — live audi
 
 ## Working style
 
+- Keep answers concise. Lead with the outcome; skip preamble and long explanations unless asked.
 - One FR section per session where possible. Small, reviewable diffs. Feature branches, descriptive commits.
 - Before building any screen, check the design bundle for an existing pattern.
 - Write tests for ledger math, payout splits, and entitlement logic — money code gets tests before merge, no exceptions.
