@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -13,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PRIVACY_URL, TERMS_URL } from '@/lib/legal';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
 import { color, font, radius, space, type } from '@/theme/tokens';
@@ -118,6 +120,19 @@ export default function SignIn() {
                 : 'Already have an account? Sign in'}
             </Text>
           </Pressable>
+
+          {/* FR-12.2/12.3: consent surfaced at signup, policy reachable pre-signup */}
+          <Text style={styles.legal}>
+            By continuing you agree to our{' '}
+            <Text style={styles.legalLink} onPress={() => Linking.openURL(TERMS_URL)}>
+              terms of service
+            </Text>{' '}
+            and{' '}
+            <Text style={styles.legalLink} onPress={() => Linking.openURL(PRIVACY_URL)}>
+              privacy policy
+            </Text>
+            , including the use of your activity to build your interest profile.
+          </Text>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -197,5 +212,14 @@ const styles = StyleSheet.create({
     color: color.orange500,
     textAlign: 'center',
     paddingVertical: space.md,
+  },
+  legal: {
+    ...type.micro,
+    color: color.textTertiary,
+    textAlign: 'center',
+  },
+  legalLink: {
+    color: color.textSecondary,
+    textDecorationLine: 'underline',
   },
 });

@@ -9,12 +9,20 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0E0D0B",
     "ios": {
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/images/icon.png",
       "bundleIdentifier": "com.moviechatterbox.app",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "MovieChatterbox uses your microphone when you speak in live Chatterboxes or record a voice note for feedback.",
+        "NSCameraUsageDescription": "MovieChatterbox does not capture photos or video. This declaration is required by the audio engine framework the app is built on.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.moviechatterbox.app",
+      "blockedPermissions": [
+        "android.permission.CAMERA"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#0E0D0B",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -39,7 +47,11 @@
           "imageWidth": 120
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      "expo-asset",
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

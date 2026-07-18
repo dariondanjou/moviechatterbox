@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +14,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RatingStars } from '@/components/rating-stars';
 import { Avatar, GhostPill } from '@/components/ui';
+import { deleteMyAccount } from '@/lib/account';
+import { confirmAction } from '@/lib/confirm';
+import { PRIVACY_URL, TERMS_URL } from '@/lib/legal';
 import {
   getMyProfile,
   listMyRatings,
@@ -33,6 +37,8 @@ export default function Profile() {
   const [watchlist, setWatchlist] = useState<{ entity_id: string }[]>([]);
   const [ratings, setRatings] = useState<Rating[]>([]);
   const [titles, setTitles] = useState<Map<string, Title>>(new Map());
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -66,6 +72,27 @@ export default function Profile() {
       handle: handleDraft.trim().replace(/^@/, '') || undefined,
     }).catch(() => {});
     load();
+  }
+
+  function confirmDeleteAccount() {
+    confirmAction({
+      title: 'Delete your account?',
+      message:
+        'This permanently deletes your profile, ratings, watchlist, posts, and Chatterbox history. This cannot be undone.',
+      confirmLabel: 'Delete forever',
+      destructive: true,
+      onConfirm: async () => {
+        setDeleting(true);
+        setDeleteError(null);
+        try {
+          await deleteMyAccount();
+          // session is gone; the auth gate redirects to sign-in
+        } catch {
+          setDeleteError('Could not delete your account. Please try again.');
+          setDeleting(false);
+        }
+      },
+    });
   }
 
   const name = profile?.display_name || 'you';
@@ -170,6 +197,22 @@ export default function Profile() {
             </Pressable>
           );
         })}
+
+        <Text style={styles.sectionLabel}>ACCOUNT</Text>
+        <View style={styles.legalRow}>
+          <Pressable onPress={() => Linking.openURL(PRIVACY_URL)}>
+            <Text style={styles.legalLink}>privacy policy</Text>
+          </Pressable>
+          <Pressable onPress={() => Linking.openURL(TERMS_URL)}>
+            <Text style={styles.legalLink}>terms of service</Text>
+          </Pressable>
+        </View>
+        {deleteError && <Text style={styles.deleteError}>{deleteError}</Text>}
+        <Pressable onPress={confirmDeleteAccount} disabled={deleting}>
+          <Text style={[styles.deleteAccount, deleting && styles.dim]}>
+            {deleting ? 'deleting account…' : 'delete account'}
+          </Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -281,5 +324,25 @@ const styles = StyleSheet.create({
     ...type.body,
     color: color.textPrimary,
     flexShrink: 1,
+  },
+  legalRow: {
+    flexDirection: 'row',
+    gap: space.xl,
+  },
+  legalLink: {
+    ...type.label,
+    color: color.textSecondary,
+  },
+  deleteAccount: {
+    ...type.label,
+    color: color.recordingText,
+    paddingVertical: space.sm,
+  },
+  deleteError: {
+    ...type.label,
+    color: color.recordingText,
+  },
+  dim: {
+    opacity: 0.5,
   },
 });

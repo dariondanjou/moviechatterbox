@@ -47,3 +47,5 @@ example
 
 # runtime assets must be tracked (root .gitignore excludes *.png)
 !assets/**/*.png
+
+play-service-account.json
