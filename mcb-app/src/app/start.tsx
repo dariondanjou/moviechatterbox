@@ -40,6 +40,7 @@ export default function StartChatterbox() {
   const [title, setTitle] = useState('');
   const [topic, setTopic] = useState('');
   const [mode, setMode] = useState<'now' | 'later'>('now');
+  const [record, setRecord] = useState(true); // replays on unless host opts out
   const [minutes, setMinutes] = useState<number>(60);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +58,7 @@ export default function StartChatterbox() {
             : undefined,
         entityType: entityType || undefined,
         entityId: entityId || undefined,
+        record,
       });
       if (mode === 'now') {
         router.replace(`/chatterbox/${box.id}`);
@@ -137,7 +139,26 @@ export default function StartChatterbox() {
             </View>
           )}
 
-          {error && <Text style={styles.error}>{error}</Text>}
+          <Text style={styles.fieldLabel}>REPLAY</Text>
+        <View style={styles.pillRow}>
+          <GhostPill
+            label="Save a replay"
+            active={record}
+            onPress={() => setRecord(true)}
+          />
+          <GhostPill
+            label="No replay"
+            active={!record}
+            onPress={() => setRecord(false)}
+          />
+        </View>
+        {record && (
+          <Text style={styles.recordHint}>
+            Recorded with in-room disclosure. You can stop recording anytime.
+          </Text>
+        )}
+
+        {error && <Text style={styles.error}>{error}</Text>}
 
           <View style={styles.submitWrap}>
             <PrimaryPill
@@ -224,6 +245,11 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: space.sm,
     marginTop: space.sm,
+  },
+  recordHint: {
+    ...type.micro,
+    color: color.textTertiary,
+    marginTop: space.xs,
   },
   error: {
     ...type.label,

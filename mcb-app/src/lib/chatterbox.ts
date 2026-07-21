@@ -17,6 +17,7 @@ export type Chatterbox = {
   started_at: string | null;
   ended_at: string | null;
   is_recorded: boolean;
+  record_on_live: boolean;
   entity_type: string | null;
   entity_id: string | null;
   created_at: string;
@@ -87,6 +88,8 @@ export async function createChatterbox(input: {
   scheduledAt?: Date;
   entityType?: string;
   entityId?: string;
+  /** Replays are on unless the host opts out (founder decision 2026-07-21). */
+  record?: boolean;
 }): Promise<Chatterbox> {
   const user = (await supabase.auth.getUser()).data.user;
   if (!user) throw new Error('not signed in');
@@ -103,6 +106,7 @@ export async function createChatterbox(input: {
       started_at: live ? new Date().toISOString() : null,
       entity_type: input.entityType ?? null,
       entity_id: input.entityId ?? null,
+      record_on_live: input.record ?? true,
     })
     .select()
     .single();
@@ -110,6 +114,9 @@ export async function createChatterbox(input: {
 
   if (live) {
     await join(data.id, 'host');
+    if (data.record_on_live) {
+      await setRecording(data.id, true).catch(() => {}); // degrade to unrecorded
+    }
     emitSignal('box_host', {
       boxId: data.id,
       entityType: data.entity_type,
@@ -120,12 +127,17 @@ export async function createChatterbox(input: {
 }
 
 export async function goLive(boxId: string): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('mcb_chatterboxes')
     .update({ status: 'live', started_at: new Date().toISOString() })
-    .eq('id', boxId);
+    .eq('id', boxId)
+    .select()
+    .single();
   if (error) throw error;
   await join(boxId, 'host');
+  if (data.record_on_live) {
+    await setRecording(boxId, true).catch(() => {}); // degrade to unrecorded
+  }
   emitSignal('box_host', { boxId });
 }
 

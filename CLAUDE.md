@@ -18,7 +18,7 @@ MovieChatterbox is a social audio platform for movie and TV lovers — live audi
 4. **Money math (FR-3.5.1):** Creator payout = 50% × (room-attributed ad revenue − room streaming cost − transcription cost when runner active), floored at zero. Joint rooms split the creator half by agreed percentages (default equal). All ledger math lives server-side, never client-side.
 5. **No iOS IAP for tickets or subscriptions (FR-3.7.2, FR-3.4.1):** Payments via Stripe web checkout with link-out. Never implement StoreKit purchases for these.
 6. **Data provenance:** All film/TV metadata and imagery from TMDB (licensed) and Wikidata (CC0) only. Never scrape or import from IMDb, Rotten Tomatoes, Letterboxd, or IMDb's non-commercial datasets. TMDB data is never used for ML training.
-7. **Privacy (FR-12.x):** Recording and transcription are host opt-in with in-room disclosure. Profiling uses are disclosed per FR-12.1. Any new data collection must be reflected in the privacy policy and store data-safety declarations — flag when a change requires this.
+7. **Privacy (FR-12.x):** Recording is on by default with host opt-out (founder decision 2026-07-21, supersedes FR-12 opt-in) — opt-out at creation or "stop rec" in-room; in-room disclosure always shown. Transcription remains host opt-in. Profiling uses are disclosed per FR-12.1. Any new data collection must be reflected in the privacy policy and store data-safety declarations — flag when a change requires this.
 
 ## Stack
 
