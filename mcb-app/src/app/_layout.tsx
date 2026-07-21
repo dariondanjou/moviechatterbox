@@ -54,7 +54,9 @@ export default function RootLayout() {
             headerShown: false,
             contentStyle: { backgroundColor: color.bgScreen },
           }}
-        />
+        >
+          <Stack.Screen name="start" options={{ presentation: 'modal' }} />
+        </Stack>
         <FloatingAudioBar />
       </AudioRoomProvider>
     </AuthProvider>

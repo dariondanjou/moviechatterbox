@@ -1,4 +1,4 @@
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -71,7 +71,6 @@ export default function StartChatterbox() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <Stack.Screen options={{ presentation: 'modal' }} />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
