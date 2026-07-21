@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ReplayPlayer } from '@/components/replay-player';
 import { GlassCard, LiveBadge, PrimaryPill, TimeChip } from '@/components/ui';
 import type { Chatterbox } from '@/lib/chatterbox';
 import {
@@ -18,6 +19,7 @@ import {
   personImgUrl,
   type Person,
 } from '@/lib/persons';
+import { listReplaysForEntity, type Replay } from '@/lib/replays';
 import { emitSignal } from '@/lib/signals';
 import { listBoxesForEntity, posterUrl, type Title } from '@/lib/titles';
 import { color, font, radius, space, type } from '@/theme/tokens';
@@ -27,6 +29,7 @@ export default function PersonPage() {
   const [person, setPerson] = useState<Person | null>(null);
   const [films, setFilms] = useState<(Title & { role: string | null })[]>([]);
   const [boxes, setBoxes] = useState<Chatterbox[]>([]);
+  const [replays, setReplays] = useState<Replay[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -36,6 +39,7 @@ export default function PersonPage() {
         if (p) {
           filmographyForPerson(p.id).then(setFilms).catch(() => {});
           listBoxesForEntity('person', p.id).then(setBoxes).catch(() => {});
+          listReplaysForEntity(p.id).then(setReplays).catch(() => {});
         }
       })
       .catch(() => {});
@@ -125,6 +129,24 @@ export default function PersonPage() {
                   <Text style={styles.boxTitle}>{b.title}</Text>
                 </GlassCard>
               </Pressable>
+            ))}
+          </>
+        )}
+
+        {replays.length > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>REPLAYS</Text>
+            {replays.map((r) => (
+              <View key={r.id} style={styles.replayBlock}>
+                {r.box && (
+                  <Pressable onPress={() => router.push(`/chatterbox/${r.box_id}`)}>
+                    <Text style={styles.replayTitle} numberOfLines={1}>
+                      {r.box.title}
+                    </Text>
+                  </Pressable>
+                )}
+                <ReplayPlayer replay={r} />
+              </View>
             ))}
           </>
         )}
@@ -221,6 +243,14 @@ const styles = StyleSheet.create({
   boxTitle: {
     ...type.heading,
     color: color.textPrimary,
+  },
+  replayBlock: {
+    gap: space.xs,
+    marginBottom: space.sm,
+  },
+  replayTitle: {
+    ...type.label,
+    color: color.textSecondary,
   },
   grid: {
     flexDirection: 'row',

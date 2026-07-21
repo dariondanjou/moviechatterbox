@@ -8,9 +8,12 @@ import {
   type PropsWithChildren,
 } from 'react';
 
+import { AppState } from 'react-native';
+
 import { createAudioSession, type AudioSession } from '@/lib/audio-session';
 import {
   fetchAudioToken,
+  getBox,
   join,
   leave,
   setMuted as setMutedDb,
@@ -226,6 +229,21 @@ export function AudioRoomProvider({ children }: PropsWithChildren) {
       supabase.removeChannel(channel);
     };
   }, [box?.id, myId, role, connectAudio, leaveRoom]);
+
+  // Foreground re-check: realtime can miss the box ending while the app is
+  // backgrounded/disconnected, leaving a stale floating bar. Verify on resume.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      const current = boxRef.current;
+      if (state !== 'active' || !current) return;
+      getBox(current.id)
+        .then((fresh) => {
+          if (!fresh || fresh.status === 'ended') leaveRoom();
+        })
+        .catch(() => {});
+    });
+    return () => sub.remove();
+  }, [leaveRoom]);
 
   // Signed out -> fully out
   useEffect(() => {

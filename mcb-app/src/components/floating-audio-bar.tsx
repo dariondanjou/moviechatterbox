@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: space.md,
     right: space.md,
-    bottom: 76, // clears the tab bar
+    bottom: 114, // clears the tab bar AND the + FAB that rises 30px above it
     alignItems: 'center',
   },
   bar: {
