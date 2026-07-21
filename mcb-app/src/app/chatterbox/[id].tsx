@@ -160,7 +160,7 @@ export default function ChatterboxScreen() {
   useEffect(() => {
     if (!id) return;
     const channel = supabase
-      .channel(`box-${id}`)
+      .channel(`box-${id}`, { config: { broadcast: { self: true } } })
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'mcb_participants', filter: `box_id=eq.${id}` },
